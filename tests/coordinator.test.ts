@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { FeedCoordinator, NO_SNAPSHOT_WAIT_MS, UPSTREAM_TIMEOUT_MS } from "../src/coordinator";
+import { FeedCoordinator } from "../src/coordinator";
 import { ENDPOINT } from "../src/feed";
 import { FakeWorld, feedJson, hangingUpstream, jsonResponse, T0 } from "./support";
 
@@ -59,7 +59,7 @@ describe("FeedCoordinator", () => {
     world.queue(hangingUpstream);
     const view = await coordinator().current();
     expect(view.snapshot).toBeNull();
-    expect(world.capWaitMs).toEqual([NO_SNAPSHOT_WAIT_MS]);
+    expect(world.capWaitMs).toEqual([5_000]);
   });
 
   test("REQ-PROVIDER-002 an attempt still in flight past the floor blocks a second one", async () => {
@@ -145,7 +145,7 @@ describe("FeedCoordinator", () => {
     world.queue(hangingUpstream, jsonResponse(feedJson()));
     const pending = coordinator().current();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(world.timeouts.map((t) => t.ms)).toEqual([UPSTREAM_TIMEOUT_MS]);
+    expect(world.timeouts.map((t) => t.ms)).toEqual([15_000]);
     world.timeouts[0]?.fire();
     const view = await pending;
     expect(world.requests).toHaveLength(2);
