@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { FeedCoordinator, UPSTREAM_TIMEOUT_MS } from "../src/coordinator";
+import { FeedCoordinator, NO_SNAPSHOT_WAIT_MS, UPSTREAM_TIMEOUT_MS } from "../src/coordinator";
 import { ENDPOINT } from "../src/feed";
 import { FakeWorld, feedJson, hangingUpstream, jsonResponse, T0 } from "./support";
 
@@ -59,6 +59,39 @@ describe("FeedCoordinator", () => {
     world.queue(hangingUpstream);
     const view = await coordinator().current();
     expect(view.snapshot).toBeNull();
+    expect(world.capWaitMs).toEqual([NO_SNAPSHOT_WAIT_MS]);
+  });
+
+  test("REQ-PROVIDER-002 an attempt still in flight past the floor blocks a second one", async () => {
+    const { world, coordinator } = setup();
+    const c = coordinator();
+    world.capWaits = true;
+    world.queue(hangingUpstream);
+    await c.current();
+    world.now += 15_000;
+    await c.current();
+    expect(world.requests).toHaveLength(1);
+  });
+
+  test("REQ-REFRESH-010 hands the background attempt to the platform to keep alive", async () => {
+    const { world, coordinator } = setup();
+    const c = coordinator();
+    let release: (r: Response) => void = () => {};
+    world.queue(
+      jsonResponse(feedJson()),
+      () => new Promise<Response>((resolve) => (release = resolve)),
+    );
+    await c.current();
+    world.now += 10_000;
+    await c.current();
+    expect(world.backgrounded).toHaveLength(2);
+    let settled = false;
+    const work = world.backgrounded[1]?.then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    release(jsonResponse(feedJson({ source: "later" })));
+    await work;
+    expect((await c.current()).snapshot?.feed.source).toBe("later");
   });
 
   test("REQ-REFRESH-010 counts a failed attempt, so a failing upstream is asked once per 10 s", async () => {

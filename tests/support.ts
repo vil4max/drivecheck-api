@@ -35,6 +35,9 @@ export class FakeWorld {
   stored: StoredState | undefined;
   /** Whether a caller without a snapshot stops waiting at once (true) or never (false). */
   capWaits = false;
+  capWaitMs: number[] = [];
+  /** Attempts handed to the platform to keep alive after their caller returned. */
+  backgrounded: Promise<void>[] = [];
   failSaves = false;
   failNextLoad = false;
   /** Timeouts requested for upstream requests, with the controller that fires each one. */
@@ -53,8 +56,13 @@ export class FakeWorld {
         this.sleeps.push(ms);
         this.now += ms;
       },
-      waitCap: () => (this.capWaits ? Promise.resolve() : new Promise<void>(() => {})),
-      background: () => {},
+      waitCap: (ms) => {
+        this.capWaitMs.push(ms);
+        return this.capWaits ? Promise.resolve() : new Promise<void>(() => {});
+      },
+      background: (work) => {
+        this.backgrounded.push(work);
+      },
       timeoutSignal: (ms) => {
         const controller = new AbortController();
         this.timeouts.push({ ms, fire: () => controller.abort(new Error("timeout")) });
