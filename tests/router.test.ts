@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { CoordinatorView } from "../src/coordinator";
-import { contrastRatio, PALETTE } from "../src/page";
+import { contrastRatio, escapeHtml, PALETTE } from "../src/page";
 import { route } from "../src/router";
 import { snapshotWith, T0 } from "./support";
 
@@ -11,15 +11,29 @@ interface Call {
   regionCode?: string | null;
   headers?: Record<string, string>;
   method?: string;
+  /** How long the coordinator takes to answer. */
+  viewDelayMs?: number;
 }
 
-function call({ path, view, now = T0, regionCode = null, headers = {}, method = "GET" }: Call) {
+function call({
+  path,
+  view,
+  now = T0,
+  regionCode = null,
+  headers = {},
+  method = "GET",
+  viewDelayMs = 0,
+}: Call) {
   const fallback: CoordinatorView = { snapshot: snapshotWith([]), rateLimitedUntil: null };
+  let clock = now;
   return route({
     request: new Request(`https://drivecheck.example${path}`, { method, headers }),
     regionCode,
-    getView: async () => view ?? fallback,
-    now,
+    getView: async () => {
+      clock += viewDelayMs;
+      return view ?? fallback;
+    },
+    clock: () => clock,
   });
 }
 
@@ -57,6 +71,20 @@ describe("GET /v1/alerts", () => {
     expect(body.freshness.rateLimitedUntil).toBe("2026-10-18T09:03:20.000Z");
   });
 
+  test("REQ-API-001 counts age and Retry-After from when the coordinator answered", async () => {
+    const view = { snapshot: snapshotWith([]), rateLimitedUntil: null };
+    const body = (await (
+      await call({ path: "/v1/alerts", view, now: T0 + 1_000, viewDelayMs: 4_000 })
+    ).json()) as { freshness: { ageSeconds: number } };
+    expect(body.freshness.ageSeconds).toBe(5);
+    const limited = await call({
+      path: "/v1/alerts",
+      view: { snapshot: null, rateLimitedUntil: T0 + 45_000 },
+      viewDelayMs: 5_000,
+    });
+    expect(limited.headers.get("retry-after")).toBe("40");
+  });
+
   test("REQ-API-002 answers 503 with Retry-After when no snapshot is held", async () => {
     const response = await call({
       path: "/v1/alerts",
@@ -82,6 +110,12 @@ describe("GET /", () => {
     expect(html).toContain("Kyiv");
     expect(html).toContain("Updated 12:00");
     expect(html).not.toContain("<script");
+  });
+
+  test("REQ-WEB-003 escapes every HTML-significant character in rendered text", () => {
+    expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(
+      "&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;",
+    );
   });
 
   test("REQ-WEB-003 every text colour has at least 4.5:1 contrast on the background", () => {

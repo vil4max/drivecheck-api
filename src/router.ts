@@ -10,7 +10,8 @@ export interface RouteInput {
   /** `request.cf.regionCode`, only when Cloudflare places the address in Ukraine. */
   regionCode: string | null;
   getView: () => Promise<CoordinatorView>;
-  now: number;
+  /** Read after the view arrives, so ages and Retry-After count from the answer, not the request. */
+  clock: () => number;
 }
 
 function pickRegion(query: string | null, regionCode: string | null): Region {
@@ -21,7 +22,12 @@ function pickRegion(query: string | null, regionCode: string | null): Region {
   );
 }
 
-export async function route({ request, regionCode, getView, now }: RouteInput): Promise<Response> {
+export async function route({
+  request,
+  regionCode,
+  getView,
+  clock,
+}: RouteInput): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname !== "/" && url.pathname !== "/v1/alerts") {
     return new Response("Not found", { status: 404 });
@@ -30,6 +36,7 @@ export async function route({ request, regionCode, getView, now }: RouteInput): 
     return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
   const view = await getView();
+  const now = clock();
   if (url.pathname === "/v1/alerts") return alertsResponse(view, now);
 
   const lang = negotiateLanguage(

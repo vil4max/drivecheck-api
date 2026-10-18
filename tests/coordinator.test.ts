@@ -1,11 +1,18 @@
 import { describe, expect, test } from "vitest";
-import { FeedCoordinator } from "../src/coordinator";
+import { FeedCoordinator, UPSTREAM_TIMEOUT_MS } from "../src/coordinator";
 import { ENDPOINT } from "../src/feed";
-import { FakeWorld, feedJson, jsonResponse, T0 } from "./support";
+import { FakeWorld, feedJson, hangingUpstream, jsonResponse, T0 } from "./support";
 
 function setup() {
   const world = new FakeWorld();
   return { world, coordinator: () => new FeedCoordinator(world.deps()) };
+}
+
+/** Asks, lets the background attempt finish, and asks again. */
+async function refreshed(c: FeedCoordinator) {
+  await c.current();
+  await c.idle();
+  return c.current();
 }
 
 describe("FeedCoordinator", () => {
@@ -30,8 +37,28 @@ describe("FeedCoordinator", () => {
     expect((await c.current()).snapshot?.feed.source).toBe("first");
     expect(world.requests).toHaveLength(1);
     world.now += 1;
-    expect((await c.current()).snapshot?.feed.source).toBe("second");
+    expect((await refreshed(c)).snapshot?.feed.source).toBe("second");
     expect(world.requests).toHaveLength(2);
+  });
+
+  test("REQ-REFRESH-010 serves a held snapshot at once while the upstream hangs", async () => {
+    const { world, coordinator } = setup();
+    const c = coordinator();
+    world.queue(jsonResponse(feedJson()), hangingUpstream);
+    await c.current();
+    world.now += 10_000;
+    const view = await c.current();
+    expect(view.snapshot?.fetchedAt).toBe(T0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(world.requests).toHaveLength(2);
+  });
+
+  test("REQ-API-002 without a snapshot a caller stops waiting for a hanging upstream", async () => {
+    const { world, coordinator } = setup();
+    world.capWaits = true;
+    world.queue(hangingUpstream);
+    const view = await coordinator().current();
+    expect(view.snapshot).toBeNull();
   });
 
   test("REQ-REFRESH-010 counts a failed attempt, so a failing upstream is asked once per 10 s", async () => {
@@ -65,6 +92,7 @@ describe("FeedCoordinator", () => {
     for (let i = 0; i < 6; i++) world.queue(jsonResponse(feedJson()));
     for (let second = 0; second < 60; second++) {
       await c.current();
+      await c.idle();
       world.now += 1_000;
     }
     expect(world.requests).toHaveLength(6);
@@ -77,6 +105,19 @@ describe("FeedCoordinator", () => {
     expect(world.sleeps).toEqual([2_000]);
     expect(world.requests).toHaveLength(2);
     expect(view.snapshot).toBeNull();
+  });
+
+  test("REQ-REFRESH-003 a request times out after 15 s and is retried once", async () => {
+    const { world, coordinator } = setup();
+    world.queue(hangingUpstream, jsonResponse(feedJson()));
+    const pending = coordinator().current();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(world.timeouts.map((t) => t.ms)).toEqual([UPSTREAM_TIMEOUT_MS]);
+    world.timeouts[0]?.fire();
+    const view = await pending;
+    expect(world.requests).toHaveLength(2);
+    expect(world.sleeps).toEqual([2_000]);
+    expect(view.snapshot).not.toBeNull();
   });
 
   test("REQ-REFRESH-003 does not retry an HTTP error", async () => {
@@ -97,14 +138,14 @@ describe("FeedCoordinator", () => {
     );
     await c.current();
     world.now += 10_000;
-    const limited = await c.current();
+    const limited = await refreshed(c);
     expect(limited.rateLimitedUntil).toBe(world.now + 45_000);
     expect(limited.snapshot?.feed.source).toBe("fixture");
     world.now += 44_999;
-    await c.current();
+    await refreshed(c);
     expect(world.requests).toHaveLength(2);
     world.now += 1;
-    const after = await c.current();
+    const after = await refreshed(c);
     expect(after.snapshot?.feed.source).toBe("after");
     expect(after.rateLimitedUntil).toBeNull();
   });
@@ -118,6 +159,21 @@ describe("FeedCoordinator", () => {
     expect((await c.current()).rateLimitedUntil).toBe(world.now + 60_000);
   });
 
+  test("REQ-REFRESH-005 the backoff restarts at 30 s after a successful fetch", async () => {
+    const { world, coordinator } = setup();
+    const c = coordinator();
+    world.queue(
+      new Response("", { status: 429 }),
+      jsonResponse(feedJson()),
+      new Response("", { status: 429 }),
+    );
+    await c.current();
+    world.now += 30_000;
+    await c.current();
+    world.now += 10_000;
+    expect((await refreshed(c)).rateLimitedUntil).toBe(world.now + 30_000);
+  });
+
   test("REQ-REFRESH-005 a restarted coordinator still honours a stored window", async () => {
     const { world, coordinator } = setup();
     world.queue(new Response("", { status: 429, headers: { "retry-after": "120" } }));
@@ -126,6 +182,17 @@ describe("FeedCoordinator", () => {
     const restarted = await coordinator().current();
     expect(world.requests).toHaveLength(1);
     expect(restarted.rateLimitedUntil).toBe(T0 + 120_000);
+  });
+
+  test("REQ-REFRESH-010 the attempt time is stored before the request is sent", async () => {
+    const { world, coordinator } = setup();
+    world.queue(hangingUpstream);
+    void coordinator().current();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(world.stored?.lastAttemptAt).toBe(T0);
+    world.now += 5_000;
+    await coordinator().current();
+    expect(world.requests).toHaveLength(1);
   });
 
   test("REQ-REFRESH-006 a failed fetch keeps the held snapshot", async () => {
@@ -137,8 +204,21 @@ describe("FeedCoordinator", () => {
     );
     await c.current();
     world.now += 10_000;
-    const view = await c.current();
+    const view = await refreshed(c);
     expect(view.snapshot?.fetchedAt).toBe(T0);
+  });
+
+  test("REQ-REFRESH-006 a failed storage write or read does not fail the callers for good", async () => {
+    const { world, coordinator } = setup();
+    world.failSaves = true;
+    world.queue(jsonResponse(feedJson()));
+    expect((await coordinator().current()).snapshot).not.toBeNull();
+    world.failSaves = false;
+    world.failNextLoad = true;
+    const c = coordinator();
+    await expect(c.current()).rejects.toThrow("storage unavailable");
+    world.queue(jsonResponse(feedJson()));
+    expect((await c.current()).snapshot).not.toBeNull();
   });
 
   test("REQ-API-003 stores one record holding only the latest snapshot and no client data", async () => {
@@ -150,7 +230,7 @@ describe("FeedCoordinator", () => {
     );
     await c.current();
     world.now += 10_000;
-    await c.current();
+    await refreshed(c);
     expect(Object.keys(world.stored ?? {}).sort()).toEqual(
       ["lastAttemptAt", "rateLimitStreak", "rateLimitedUntil", "snapshot"].sort(),
     );

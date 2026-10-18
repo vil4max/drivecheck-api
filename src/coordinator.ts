@@ -35,8 +35,16 @@ export interface CoordinatorDeps {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   store: StateStore;
+  /** Resolves when a caller without any snapshot stops waiting for the upstream. */
+  waitCap: (ms: number) => Promise<void>;
+  /** Keeps an attempt running after its caller got the held snapshot. */
+  background: (work: Promise<void>) => void;
+  timeoutSignal?: (ms: number) => AbortSignal;
   log?: (message: string) => void;
 }
+
+/** How long a caller with nothing to serve waits for the upstream before REQ-API-002's answer. */
+export const NO_SNAPSHOT_WAIT_MS = 5_000;
 
 class TransientFailure extends Error {}
 
@@ -57,22 +65,37 @@ export class FeedCoordinator {
       this.inFlight = this.attempt(state).finally(() => {
         this.inFlight = null;
       });
+      this.deps.background(this.inFlight);
     }
-    if (this.inFlight !== null) await this.inFlight;
+    // A held snapshot is served at once (REQ-REFRESH-010); a slow upstream refreshes it later.
+    if (this.inFlight !== null && state.snapshot === null) {
+      await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
+    }
     return { snapshot: state.snapshot, rateLimitedUntil: this.openWindow(state) };
+  }
+
+  /** Resolves once no upstream attempt is running. */
+  async idle(): Promise<void> {
+    while (this.inFlight !== null) await this.inFlight;
   }
 
   private load(): Promise<StoredState> {
     if (this.state !== null) return Promise.resolve(this.state);
-    this.loading ??= this.deps.store.load().then((stored) => {
-      this.state = stored ?? {
-        snapshot: null,
-        lastAttemptAt: null,
-        rateLimitedUntil: null,
-        rateLimitStreak: 0,
-      };
-      return this.state;
-    });
+    this.loading ??= this.deps.store.load().then(
+      (stored) => {
+        this.state = stored ?? {
+          snapshot: null,
+          lastAttemptAt: null,
+          rateLimitedUntil: null,
+          rateLimitStreak: 0,
+        };
+        return this.state;
+      },
+      (error: unknown) => {
+        this.loading = null;
+        throw error;
+      },
+    );
     return this.loading;
   }
 
@@ -88,6 +111,8 @@ export class FeedCoordinator {
 
   private async attempt(state: StoredState): Promise<void> {
     state.lastAttemptAt = this.deps.now();
+    // Stored before the request, so a coordinator restarted mid-request still honours the floor.
+    await this.save(state);
     try {
       let response: Response;
       try {
@@ -102,14 +127,24 @@ export class FeedCoordinator {
     } catch (error) {
       this.deps.log?.(`upstream attempt failed: ${(error as Error).message}`);
     }
-    await this.deps.store.save(state);
+    await this.save(state);
+  }
+
+  // The in-memory state stays authoritative, so a failed write must not fail the callers.
+  private async save(state: StoredState): Promise<void> {
+    try {
+      await this.deps.store.save(state);
+    } catch (error) {
+      this.deps.log?.(`state save failed: ${(error as Error).message}`);
+    }
   }
 
   private async request(): Promise<Response> {
+    const timeoutSignal = this.deps.timeoutSignal ?? ((ms) => AbortSignal.timeout(ms));
     try {
       return await this.deps.fetch(ENDPOINT, {
         headers: { "user-agent": USER_AGENT, accept: "application/json" },
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        signal: timeoutSignal(UPSTREAM_TIMEOUT_MS),
       });
     } catch (error) {
       throw new TransientFailure((error as Error).message);

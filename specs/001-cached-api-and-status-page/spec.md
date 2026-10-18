@@ -153,7 +153,9 @@ Status: approved (iOS, 2026-09-17)
 Given an upstream attempt started less than 10 s ago, whatever its outcome\
 When any client asks\
 Then no upstream request is sent and the held snapshot is served (or the API-002 answer when there
-is none); the 2 s retry of REQ-REFRESH-003 belongs to its attempt and is not held
+is none); the 2 s retry of REQ-REFRESH-003 belongs to its attempt and is not held. Outside the
+floor, a caller with a held snapshot gets it at once while the attempt runs in the background, so a
+slow upstream never delays an answer that is already known
 
 Difference from iOS: the floor is shared by every client instead of one device, and it also counts
 failed attempts. iOS floors only after a success because one device's retries are already bounded;
@@ -198,7 +200,7 @@ fields let it judge staleness without trusting its own clock alone.
 Status: proposed
 
 Given no snapshot is held\
-When the upstream fails or a 429 window is open\
+When the upstream fails, has not answered within 5 s, or a 429 window is open\
 Then the API answers HTTP 503 JSON `{"apiVersion":1,"error":"unavailable"}` with `Retry-After`
 when a window is open, and the page shows "Unavailable" with HTTP 503
 
@@ -285,14 +287,12 @@ Strings and region names come from the Android resources, which follow the iOS S
 
 TypeScript 6.0.3 (TypeScript 7 is a new native compiler, too new for a proof), Vitest 5.0.3 for
 tests in Node with the Worker's logic kept free of Cloudflare imports, Biome 2.5.15 for lint and
-format, `@cloudflare/workers-types` for types. Wrangler 4.147.0 is not a dependency: CI runs it
-through `npx` for a dry-run bundle, and the owner runs it to deploy. Every version was published
-before 2026-10-04.
+format, `@cloudflare/workers-types` for types, Wrangler 4.147.0 for the CI dry-run bundle and the
+owner's deploy, pinned in the lockfile. Every version was published before 2026-10-04.
 
 ## Decisions for the owner
 
 - O1: approve REQ-API-001 to REQ-WEB-003 as written, or amend them.
 - O2: REQ-WEB-002 uses the visitor's network region. If that reads as location tracking, the
   alternative is Kyiv city always, with `?region=` for links.
-- O3: deploy: the owner signs in to Cloudflare and runs `npx wrangler@4.147.0 deploy` (plan.md,
-  "Deploy").
+- O3: deploy: the owner signs in to Cloudflare and runs `npx wrangler deploy` (plan.md, "Deploy").

@@ -14,10 +14,13 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
     this.coordinator = new FeedCoordinator({
       fetch: (url, init) => fetch(url, init),
       now: () => Date.now(),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      sleep,
+      waitCap: sleep,
+      background: (work) => ctx.waitUntil(work),
       store: {
         load: () => ctx.storage.get<StoredState>(STATE_KEY),
         save: (state) => ctx.storage.put(STATE_KEY, state),
@@ -37,6 +40,6 @@ export default {
     const cf = request.cf;
     const regionCode =
       cf?.country === "UA" && typeof cf.regionCode === "string" ? cf.regionCode : null;
-    return route({ request, regionCode, getView: () => stub.current(), now: Date.now() });
+    return route({ request, regionCode, getView: () => stub.current(), clock: Date.now });
   },
 } satisfies ExportedHandler<Env>;

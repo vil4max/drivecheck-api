@@ -24,7 +24,7 @@ export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-type Step = Response | Error | (() => Promise<Response>);
+type Step = Response | Error | ((init: RequestInit) => Promise<Response>);
 
 /** A controllable world: clock, upstream, sleeping and the coordinator's one stored record. */
 export class FakeWorld {
@@ -33,6 +33,12 @@ export class FakeWorld {
   sleeps: number[] = [];
   saves: StoredState[] = [];
   stored: StoredState | undefined;
+  /** Whether a caller without a snapshot stops waiting at once (true) or never (false). */
+  capWaits = false;
+  failSaves = false;
+  failNextLoad = false;
+  /** Timeouts requested for upstream requests, with the controller that fires each one. */
+  timeouts: { ms: number; fire: () => void }[] = [];
   private steps: Step[] = [];
 
   queue(...steps: Step[]): this {
@@ -47,21 +53,42 @@ export class FakeWorld {
         this.sleeps.push(ms);
         this.now += ms;
       },
-      fetch: async (url) => {
+      waitCap: () => (this.capWaits ? Promise.resolve() : new Promise<void>(() => {})),
+      background: () => {},
+      timeoutSignal: (ms) => {
+        const controller = new AbortController();
+        this.timeouts.push({ ms, fire: () => controller.abort(new Error("timeout")) });
+        return controller.signal;
+      },
+      fetch: async (url, init) => {
         this.requests.push(url);
         const step = this.steps.shift();
         if (step === undefined) throw new Error("no upstream response queued");
         if (step instanceof Error) throw step;
-        if (typeof step === "function") return step();
+        if (typeof step === "function") return step(init);
         return step;
       },
       store: {
-        load: async () => this.stored,
+        load: async () => {
+          if (this.failNextLoad) {
+            this.failNextLoad = false;
+            throw new Error("storage unavailable");
+          }
+          return this.stored;
+        },
         save: async (state) => {
+          if (this.failSaves) throw new Error("storage unavailable");
           this.stored = structuredClone(state);
           this.saves.push(structuredClone(state));
         },
       },
     };
   }
+}
+
+/** An upstream that never answers until the request's timeout signal fires. */
+export function hangingUpstream(init: RequestInit): Promise<Response> {
+  return new Promise((_, reject) => {
+    init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+  });
 }

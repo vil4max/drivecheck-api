@@ -9,7 +9,9 @@ Feature: `001-cached-api-and-status-page` · Spec: [spec.md](spec.md) · Tasks: 
 - Tests: Vitest 5.0.3 in Node 24. Logic modules import nothing from `cloudflare:*`, so they run in
   Node with fakes for `fetch`, the clock, sleeping and storage. Only `src/worker.ts` binds them to
   the platform; CI checks it by type-checking and by a Wrangler dry-run bundle.
-- Lint and format: Biome 2.5.15. Types: `@cloudflare/workers-types` 5.20261003.1.
+- Lint and format: Biome 2.5.15 (warnings fail; `noNonNullAssertion` is off because
+  `noUncheckedIndexedAccess` makes `!` the explicit mark of a known index). Types:
+  `@cloudflare/workers-types` 5.20261003.1. Bundle and deploy: Wrangler 4.147.0.
 
 ## Structure
 
@@ -33,13 +35,15 @@ scripts/          spec-trace.py and its contract tests
 
 1. A request reaches the Worker in any Cloudflare location.
 2. The Worker asks the one Durable Object (`idFromName("feed")`) for its view over RPC.
-3. The coordinator answers from memory, or, when outside the floor and the 429 window, makes the
-   single upstream attempt that every waiting caller shares, then answers.
-4. The router renders JSON or HTML from that view.
+3. The coordinator answers from memory. Outside the floor and the 429 window it starts the single
+   upstream attempt (kept alive with `ctx.waitUntil`): a caller with a held snapshot gets it at
+   once, a caller without one waits for the attempt for at most 5 s.
+4. The router reads the clock after the coordinator answers and renders JSON or HTML.
 
 Stored state is one record, `state`: the latest snapshot, the last attempt time, the rate-limit
-window and the 429 streak (REQ-API-003). At most one write per attempt, so at most 8,640 rows per
-day, under the free plan's 100,000.
+window and the 429 streak (REQ-API-003). Two writes per attempt (the attempt time before the
+request, the outcome after), so at most 17,280 rows per day, under the free plan's 100,000. A failed
+write is logged and does not fail callers; the in-memory state stays authoritative.
 
 ## Requirement trace check
 
@@ -58,8 +62,9 @@ Wrangler dry-run bundle.
 ## Deploy (the owner's step)
 
 ```
-npx wrangler@4.147.0 login
-npx wrangler@4.147.0 deploy
+npm ci
+npx wrangler login
+npx wrangler deploy
 ```
 
 The first deploy creates the `FeedCoordinatorObject` namespace from the `v1` migration in
