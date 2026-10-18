@@ -301,5 +301,7 @@ the six slice 1 requirements count as approved together with the answer.
   written.
 - O2, decided 2026-10-18 (A): REQ-WEB-002 uses the visitor's network region. The region is neither
   stored nor logged, and an unknown or non-Ukrainian region falls back to Kyiv city.
-- O3, open: deploy. The owner signs in to Cloudflare and runs `npx wrangler deploy` (plan.md,
-  "Deploy").
+- O3, done 2026-10-18: the owner approved the deploy in this session and signed in to Cloudflare
+  himself. Wrangler 4.147.0 deployed `main` at 468ae3c to https://drivecheck-api.vil4max.workers.dev
+  (version ee9dcce7). Smoke test: `/v1/alerts` answers 200 with 26 states and freshness, `/` renders
+  in en, uk and ru, an unknown path answers 404, and three calls inside 10 s share one `fetchedAt`.

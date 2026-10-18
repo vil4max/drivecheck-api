@@ -7,7 +7,7 @@ One pull request. Inside each group the tests come first and are seen failing be
 ## Group 0 — spec
 
 - [x] T001 Write spec, plan and tasks with the runtime, API and page decisions.
-- [ ] T002 [Owner] Approve the proposed requirements and answer O1 to O3.
+- [x] T002 [Owner] Approve the proposed requirements and answer O1 to O3.
 
 ## Group 1 — skeleton and gate
 
@@ -33,5 +33,5 @@ One pull request. Inside each group the tests come first and are seen failing be
 
 ## Group 4 — release of the slice
 
-- [ ] T040 Independent review by the orchestrator; the owner's yes; merge.
-- [ ] T041 [Owner] Deploy with Wrangler and share the URL.
+- [x] T040 Independent review by the orchestrator; the owner's yes; merge.
+- [x] T041 [Owner] Deploy with Wrangler and share the URL.
