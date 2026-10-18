@@ -14,6 +14,13 @@ export interface RouteInput {
   clock: () => number;
 }
 
+/** The ISO 3166-2:UA code of the visitor's network region, used for this response only. */
+export function ukrainianRegionCode(
+  cf: { country?: unknown; regionCode?: unknown } | undefined,
+): string | null {
+  return cf?.country === "UA" && typeof cf.regionCode === "string" ? cf.regionCode : null;
+}
+
 function pickRegion(query: string | null, regionCode: string | null): Region {
   return (
     (query === null ? undefined : regionById(query)) ??

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { CoordinatorView } from "../src/coordinator";
 import { contrastRatio, escapeHtml, PALETTE } from "../src/page";
-import { route } from "../src/router";
+import { route, ukrainianRegionCode } from "../src/router";
 import { snapshotWith, T0 } from "./support";
 
 interface Call {
@@ -178,6 +178,20 @@ describe("GET /", () => {
     expect(en).toContain('<html lang="en"');
     expect(en).toContain('hreflang="uk"');
     expect(en).toContain('hreflang="ru"');
+  });
+
+  test("REQ-WEB-002 uses the network region only for a Ukrainian address", () => {
+    expect(ukrainianRegionCode({ country: "UA", regionCode: "46" })).toBe("46");
+    expect(ukrainianRegionCode({ country: "PL", regionCode: "14" })).toBeNull();
+    expect(ukrainianRegionCode({ country: "UA" })).toBeNull();
+    expect(ukrainianRegionCode(undefined)).toBeNull();
+  });
+
+  test("REQ-WEB-002 an unknown network region falls back to Kyiv city", async () => {
+    for (const regionCode of ["40", "43", "99"]) {
+      const html = await (await call({ path: "/?lang=en", regionCode })).text();
+      expect(html).toContain('<p class="region">Kyiv</p>');
+    }
   });
 
   test("REQ-WEB-002 picks the region from ?region, then the network region, else Kyiv city", async () => {

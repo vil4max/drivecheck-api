@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { type CoordinatorView, FeedCoordinator, type StoredState } from "./coordinator";
-import { route } from "./router";
+import { route, ukrainianRegionCode } from "./router";
 
 export interface Env {
   FEED: DurableObjectNamespace<FeedCoordinatorObject>;
@@ -37,9 +37,7 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
 export default {
   fetch(request, env): Promise<Response> {
     const stub = env.FEED.get(env.FEED.idFromName("feed"));
-    const cf = request.cf;
-    const regionCode =
-      cf?.country === "UA" && typeof cf.regionCode === "string" ? cf.regionCode : null;
+    const regionCode = ukrainianRegionCode(request.cf);
     return route({ request, regionCode, getView: () => stub.current(), clock: Date.now });
   },
 } satisfies ExportedHandler<Env>;
