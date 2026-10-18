@@ -43,6 +43,7 @@ passing test. The feature spec, plan and tasks live in
 Needs a Cloudflare account (the Workers Free plan is enough):
 
 ```
-npx wrangler@4.147.0 login
-npx wrangler@4.147.0 deploy
+npm ci
+npx wrangler login
+npx wrangler deploy
 ```

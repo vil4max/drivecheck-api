@@ -14,12 +14,13 @@
     "test:report": "vitest run --reporter=default --reporter=json --outputFile=reports/vitest.json",
     "trace": "python3 scripts/spec-trace.py --results reports/vitest.json",
     "check": "npm run typecheck && npm run lint && npm run test:report && npm run trace",
-    "bundle": "npx --yes wrangler@4.147.0 deploy --dry-run --outdir dist"
+    "bundle": "wrangler deploy --dry-run --outdir dist"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@cloudflare/workers-types": "5.20261003.1",
     "typescript": "6.0.3",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "wrangler": "4.147.0"
   }
 }
