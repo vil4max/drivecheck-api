@@ -1,8 +1,8 @@
 # Feature specification: cached API and status page
 
 Feature: `001-cached-api-and-status-page` · Created: 2026-10-18
-Status: draft for the owner's review. Requirements shared with the apps keep the status the owner
-gave them in `regional-check`; backend-only requirements are `proposed` until the owner approves them.
+Status: approved by the owner on 2026-10-18 (see "Owner decisions"). Requirements shared with the
+apps keep the status the owner gave them in `regional-check`.
 Input: the owner's decision of 2026-10-18 (a backend and web proof for Drive Check, slice 1: cached
 API plus status page).
 
@@ -183,7 +183,7 @@ Then the nearby-alerts line lists them, using the iOS neighbour table; with none
 
 ### REQ-API-001 — Versioned mirror endpoint
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given a client asks `GET /v1/alerts`\
 When a snapshot is held\
@@ -197,7 +197,7 @@ fields let it judge staleness without trusting its own clock alone.
 
 ### REQ-API-002 — No snapshot, no fake status
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given no snapshot is held\
 When the upstream fails, has not answered within 5 s, or a 429 window is open\
@@ -206,7 +206,7 @@ when a window is open, and the page shows "Unavailable" with HTTP 503
 
 ### REQ-API-003 — No history and no personal data
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given the coordinator stores state\
 When it saves a snapshot or a rate-limit window\
@@ -217,7 +217,7 @@ Reason: core "Never" forbids alert history and analytics; a public proof must sh
 
 ### REQ-WEB-001 — Language
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given a page request\
 When `?lang=` names `en`, `uk` or `ru`, or else `Accept-Language` prefers one of them\
@@ -226,12 +226,13 @@ other two languages
 
 ### REQ-WEB-002 — Current region
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given a page request\
 When `?region=` names a catalog region id, or else Cloudflare's `request.cf.regionCode` for a
 Ukrainian address maps to a region\
-Then the page shows that region, Kyiv city otherwise
+Then the page shows that region, Kyiv city otherwise (an unknown code, a non-Ukrainian address or no
+code), and the region code is neither stored nor logged
 
 Reason: the apps follow device location and fall back to Kyiv (REQ-REGION-009). A web page without
 a location prompt gets the nearest honest equivalent, the region of the visitor's network address,
@@ -240,7 +241,7 @@ checks; the page offers no region picker, as the apps offer none since 2026-09-2
 
 ### REQ-WEB-003 — Accessible glanceable status
 
-Status: proposed
+Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
 Given the page renders a status\
 When it is read by a screen reader or seen without colour\
@@ -290,9 +291,15 @@ tests in Node with the Worker's logic kept free of Cloudflare imports, Biome 2.5
 format, `@cloudflare/workers-types` for types, Wrangler 4.147.0 for the CI dry-run bundle and the
 owner's deploy, pinned in the lockfile. Every version was published before 2026-10-04.
 
-## Decisions for the owner
+## Owner decisions
 
-- O1: approve REQ-API-001 to REQ-WEB-003 as written, or amend them.
-- O2: REQ-WEB-002 uses the visitor's network region. If that reads as location tracking, the
-  alternative is Kyiv city always, with `?region=` for links.
-- O3: deploy: the owner signs in to Cloudflare and runs `npx wrangler deploy` (plan.md, "Deploy").
+On 2026-10-18 the owner answered «а» (relayed by the orchestrator). The question offered A, the
+visitor's region from Cloudflare's IP region, else Kyiv city; or B, always Kyiv city. It also said
+the six slice 1 requirements count as approved together with the answer.
+
+- O1, decided 2026-10-18: REQ-API-001 to REQ-API-003 and REQ-WEB-001 to REQ-WEB-003 are approved as
+  written.
+- O2, decided 2026-10-18 (A): REQ-WEB-002 uses the visitor's network region. The region is neither
+  stored nor logged, and an unknown or non-Ukrainian region falls back to Kyiv city.
+- O3, open: deploy. The owner signs in to Cloudflare and runs `npx wrangler deploy` (plan.md,
+  "Deploy").
