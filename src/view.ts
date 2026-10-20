@@ -2,7 +2,7 @@ import type { Snapshot } from "./feed.ts";
 import type { Glyph } from "./glyphs.ts";
 import { STRINGS } from "./i18n.ts";
 import { type Lang, REGIONS, type Region } from "./regions.ts";
-import { statusView } from "./status.ts";
+import { checkedAt, isStale, statusView } from "./status.ts";
 
 /** The status colour, as iOS `StatusAccent`; theme.ts maps it to the palette. */
 export type Accent = "clear" | "alert" | "caution" | "stale" | "unavailable";
@@ -127,6 +127,9 @@ export interface RegionRow {
 export interface RegionsModel {
   lang: Lang;
   linkRegion: string | null;
+  regionId: string;
+  /** "Updated HH:mm", or "Last known · Updated HH:mm" once stale; null without data. */
+  meta: string | null;
   current: { name: string; accent: Accent; pill: string | null };
   alerting: RegionRow[];
   others: RegionRow[];
@@ -138,8 +141,17 @@ export function regionsModel(
   region: Region,
   lang: Lang,
   linkRegion: string | null = null,
+  now: number | null = null,
 ): RegionsModel {
   const s = STRINGS[lang];
+  // The list is as old as its answer: it says when that was, and Last known once stale.
+  let meta: string | null = null;
+  let stale = false;
+  if (snapshot !== null && now !== null) {
+    const time = kyivClock(checkedAt(snapshot));
+    stale = isStale(snapshot, now);
+    meta = stale ? s.lastKnownAt(time) : s.updated(time);
+  }
   const rows: RegionRow[] = REGIONS.map((r) => {
     const state = snapshot?.feed.states[r.apiKey];
     return {
@@ -153,9 +165,19 @@ export function regionsModel(
   return {
     lang,
     linkRegion,
+    regionId: region.id,
+    meta,
     current: {
       name: own.name,
-      accent: own.state === "on" ? "alert" : own.state === "off" ? "clear" : "unavailable",
+      // As on Status: a known alarm stays red when old, a quiet status turns grey.
+      accent:
+        own.state === "on"
+          ? "alert"
+          : own.state === "off"
+            ? stale
+              ? "stale"
+              : "clear"
+            : "unavailable",
       pill: own.state === "on" ? s.alertShort : own.state === "off" ? s.noAlertShort : null,
     },
     alerting: rows.filter((r) => r.state === "on"),

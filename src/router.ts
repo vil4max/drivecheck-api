@@ -121,7 +121,10 @@ export async function route({
   const linkRegion = regionById(url.searchParams.get("region") ?? "")?.id ?? null;
   const html =
     url.pathname === "/regions"
-      ? renderRegions(regionsModel(view.snapshot, region, lang, linkRegion))
+      ? renderRegions(regionsModel(view.snapshot, region, lang, linkRegion, now), {
+          snapshot: view.snapshot,
+          mapFetchedAt,
+        })
       : renderPage(statusModel(view.snapshot, region, lang, now, mapFetchedAt, linkRegion), {
           snapshot: view.snapshot,
           mapFetchedAt,

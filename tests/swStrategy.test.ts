@@ -5,6 +5,8 @@ import { OFFLINE_HEADER } from "../src/client/refresh";
 import { PAGE_CSP } from "../src/csp";
 import { renderPage } from "../src/page";
 import { regionById } from "../src/regions";
+import { renderRegions } from "../src/regionsPage";
+import { redrawSaved } from "../src/savedPage";
 import {
   activate,
   handle,
@@ -15,7 +17,7 @@ import {
   seedStatic,
 } from "../src/swStrategy";
 import { VERSION } from "../src/version";
-import { statusModel } from "../src/view";
+import { regionsModel, statusModel } from "../src/view";
 import { snapshotWith, T0 } from "./support";
 
 const ORIGIN = "https://drivecheck.example";
@@ -246,5 +248,36 @@ describe("review repairs, M2", () => {
     expect(await (await handle(page("/regions"), world.deps())).text()).toBe(
       "<html>regions</html>",
     );
+  });
+});
+
+describe("every saved page shows its age offline", () => {
+  const snapshot = snapshotWith(["Львівська область"]);
+
+  test("REQ-REFRESH-006 REQ-WEB-008 a saved Regions page served hours later reads Last known", async () => {
+    const world = new World();
+    const html = renderRegions(regionsModel(snapshot, regionById("kyiv-city")!, "en", null, T0), {
+      snapshot,
+      mapFetchedAt: null,
+    });
+    expect(html).toContain("Updated 12:00");
+    world.network = async () => new Response(html, { headers: { "content-type": "text/html" } });
+    await handle(page("/regions?lang=en"), world.deps());
+    world.network = offline;
+    world.now = T0 + 3 * 3_600_000;
+    const text = await (await handle(page("/regions"), world.deps())).text();
+    expect(text).toContain("Last known · Updated 12:00");
+    expect(text).not.toContain(">Updated 12:00<");
+  });
+
+  test("REQ-REFRESH-006 the redraw reads attributes, not exact markup", () => {
+    const html = renderPage(statusModel(snapshot, regionById("kyiv-city")!, "en", T0, null), {
+      snapshot,
+      mapFetchedAt: null,
+    })
+      .replace('<html lang="en">', '<html data-theme="dark" lang="en" dir="ltr">')
+      .replace('<main id="main"', '<main class="x" id="main"');
+    const redrawn = redrawSaved(html, T0 + 3 * 3_600_000);
+    expect(redrawn).toContain("Last known: No Alert · 12:00");
   });
 });

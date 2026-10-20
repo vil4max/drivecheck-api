@@ -8,6 +8,8 @@ export interface Strings {
   stayAlert: string;
   updated: (time: string) => string;
   lastKnown: (status: string, time: string) => string;
+  /** The Regions page's age line when its data is no longer current. */
+  lastKnownAt: (time: string) => string;
   /** The meta line when there is no status to date: `unavailable` and `regionUnavailable`. */
   retry: Record<"unavailable" | "regionUnavailable", string>;
   nearby: (names: string) => string;
@@ -50,6 +52,7 @@ export const STRINGS: Record<Lang, Strings> = {
     stayAlert: "Stay Alert",
     updated: (t) => `Updated ${t}`,
     lastKnown: (s, t) => `Last known: ${s} · ${t}`,
+    lastKnownAt: (t) => `Last known · Updated ${t}`,
     retry: {
       unavailable: "Refresh and try again",
       regionUnavailable: "Pick another region or refresh",
@@ -90,6 +93,7 @@ export const STRINGS: Record<Lang, Strings> = {
     stayAlert: "Будьте уважні",
     updated: (t) => `Оновлено ${t}`,
     lastKnown: (s, t) => `Востаннє відоме: ${s} · ${t}`,
+    lastKnownAt: (t) => `Востаннє відоме · Оновлено ${t}`,
     retry: {
       unavailable: "Оновіть і спробуйте знову",
       regionUnavailable: "Оберіть інший регіон або оновіть",
@@ -131,6 +135,7 @@ export const STRINGS: Record<Lang, Strings> = {
     stayAlert: "Будьте внимательны",
     updated: (t) => `Обновлено ${t}`,
     lastKnown: (s, t) => `Последнее известное: ${s} · ${t}`,
+    lastKnownAt: (t) => `Последнее известное · Обновлено ${t}`,
     retry: {
       unavailable: "Обновите и попробуйте снова",
       regionUnavailable: "Выберите другой регион или обновите",

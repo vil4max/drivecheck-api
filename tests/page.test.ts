@@ -268,3 +268,18 @@ describe("review repairs, M3", () => {
     expect(STYLESHEET).toContain(".radar{position:relative;width:min(9.75rem,100%);aspect-ratio:1");
   });
 });
+
+describe("Regions shows its age", () => {
+  test("REQ-REFRESH-006 REQ-WEB-013 Regions states its update time, and Last known once stale", () => {
+    const snapshot = snapshotWith(["lviv"].map(key)); // checked at T0, 12:00 Kyiv
+    const fresh = regionsModel(snapshot, region("kyiv-city"), "en", null, T0);
+    expect(fresh.meta).toBe("Updated 12:00");
+    expect(fresh.current.accent).toBe("clear");
+    const old = regionsModel(snapshot, region("kyiv-city"), "uk", null, T0 + 3 * 3_600_000);
+    expect(old.meta).toBe("Востаннє відоме · Оновлено 12:00");
+    expect(old.current.accent).toBe("stale");
+    const page = renderRegions(old);
+    expect(page).toContain("Востаннє відоме · Оновлено 12:00");
+    expect(regionsModel(null, region("kyiv-city"), "en", null, T0).meta).toBeNull();
+  });
+});

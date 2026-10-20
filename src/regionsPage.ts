@@ -1,3 +1,4 @@
+import type { Snapshot } from "./feed.ts";
 import { glyph } from "./glyphs.ts";
 import { STRINGS } from "./i18n.ts";
 import { documentShell, escapeHtml, pageHref } from "./page.ts";
@@ -14,7 +15,10 @@ function row(r: RegionRow, alertLabel: string): string {
  * The Regions page, as iOS `RegionListView` (REQ-WEB-013). Each row is a submit button of one
  * form, so picking a region works without JavaScript (REQ-WEB-004).
  */
-export function renderRegions(model: RegionsModel): string {
+export function renderRegions(
+  model: RegionsModel,
+  state?: { snapshot: Snapshot | null; mapFetchedAt: number | null },
+): string {
   const s = STRINGS[model.lang];
   const pill =
     model.current.pill === null
@@ -24,7 +28,9 @@ export function renderRegions(model: RegionsModel): string {
     model.alerting.length === 0
       ? ""
       : `<section class="section"><h2>${escapeHtml(s.alertSection(model.alerting.length))}</h2><ul class="card group alerting">${model.alerting.map((r) => row(r, s.alertShort)).join("")}</ul></section>`;
+  const meta = model.meta === null ? "" : `<p class="meta">${escapeHtml(model.meta)}</p>`;
   const main = `<h1 class="page-title">${escapeHtml(s.regions)}</h1>
+${meta}
 <div class="card current accent-${model.current.accent}"><span class="pin">${glyph("location")}</span><span class="grow"><span class="label">${escapeHtml(s.currentRegion)}</span><span class="name">${escapeHtml(model.current.name)}</span></span>${pill}</div>
 <form method="post" action="/region" class="regions"><input type="hidden" name="lang" value="${model.lang}">
 ${alerting}
@@ -37,6 +43,9 @@ ${alerting}
     accent: model.current.accent,
     path: "/regions",
     linkRegion: model.linkRegion,
+    page: "regions",
+    regionId: model.regionId,
+    ...(state === undefined ? {} : { data: JSON.stringify(state) }),
     toolbar,
     main,
   });

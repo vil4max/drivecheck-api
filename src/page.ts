@@ -35,6 +35,9 @@ export function documentShell(opts: {
   main: string;
   /** Data the enhancing script starts from, so opening the page adds no request. */
   data?: string;
+  /** Which page this is and for which region, so a saved copy can be drawn again offline. */
+  page?: "status" | "regions";
+  regionId?: string;
 }): string {
   const s = STRINGS[opts.lang];
   const languages = LANGS.filter((l) => l !== opts.lang)
@@ -60,7 +63,7 @@ export function documentShell(opts: {
 <body class="accent-${opts.accent}">
 <div class="shell">
 <header class="toolbar">${opts.toolbar}<p class="title">Drive Check</p></header>
-<main id="main"${opts.data === undefined ? "" : ` data-state="${escapeHtml(opts.data)}"`}>
+<main id="main"${opts.page === undefined ? "" : ` data-page="${opts.page}" data-region="${escapeHtml(opts.regionId ?? "")}"`}${opts.data === undefined ? "" : ` data-state="${escapeHtml(opts.data)}"`}>
 ${opts.main}
 </main>
 <footer class="footer">
@@ -112,6 +115,8 @@ ${caption}
     linkRegion: model.linkRegion,
     toolbar,
     main,
+    page: "status",
+    regionId: model.regionId,
     ...(state === undefined ? {} : { data: JSON.stringify(state) }),
   });
 }
