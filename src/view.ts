@@ -162,3 +162,9 @@ export function regionsModel(
     others: rows.filter((r) => r.state !== "on"),
   };
 }
+
+/** An open page's map is behind when it is a minute older than the status it sits under. */
+export function mapBehind(mapFetchedAt: number | null, snapshot: Snapshot | null): boolean {
+  if (snapshot === null) return false;
+  return mapFetchedAt === null || snapshot.fetchedAt - mapFetchedAt >= 60_000;
+}

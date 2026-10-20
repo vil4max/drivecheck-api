@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { ENDPOINT, FeedCoordinator, MAP_ENDPOINT } from "../src/coordinator";
 import { route } from "../src/router";
+import { mapBehind } from "../src/view";
 import {
   FakeWorld,
   feedJson,
@@ -67,21 +68,37 @@ describe("alert map through the coordinator", () => {
 
   test("REQ-WEB-012 the map waits 3 s after a JSON request, as iOS does after the status", async () => {
     const { world, c } = setup();
-    world.queue(jsonResponse(feedJson()), imageResponse([1]), imageResponse([2]));
+    world.queue(jsonResponse(feedJson()), imageResponse([1]));
     await c.current();
     world.now += 500;
     expect(await bytesOf(await c.currentMap())).toEqual([1]);
     expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT]);
     expect(world.sleeps).toEqual([2_500]);
+  });
 
-    // With an image held, a map refresh that is too close to a JSON request is simply skipped.
-    world.now += 60_000;
-    world.queue(jsonResponse(feedJson()));
+  test("REQ-WEB-012 a page load's JSON attempt delays the map refresh but never drops it", async () => {
+    const { world, c } = setup();
+    world.queue(jsonResponse(feedJson()), imageResponse([1]));
     await c.current();
     await c.idle();
-    world.now += 1_000;
-    expect(await bytesOf(await c.currentMap())).toEqual([1]);
-    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT, ENDPOINT]);
+    world.now += 3_000;
+    await c.currentMap();
+    await c.idle();
+
+    // A visitor opens the page a minute later: its request starts a JSON attempt, and its map
+    // request arrives 0.1 s after, while that attempt is still in flight.
+    world.now += 60_000;
+    world.queue(jsonResponse(feedJson()), imageResponse([2]));
+    await c.current();
+    world.now += 100;
+    expect(await bytesOf(await c.currentMap())).toEqual([1]); // the held map, at once
+    await c.idle();
+    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT, ENDPOINT, MAP_ENDPOINT]);
+    expect(world.sleeps.at(-1)).toBe(2_900); // 3 s after the JSON request, not dropped
+    const fresh = await c.currentMap();
+    expect(await bytesOf(fresh)).toEqual([2]);
+    // The page's caption ages from this map, so it agrees with the snapshot it counts.
+    expect((await c.current()).mapFetchedAt).toBe(fresh?.fetchedAt);
   });
 
   test("REQ-WEB-012 a JSON request waits a second after a map request", async () => {
@@ -176,5 +193,26 @@ describe("GET /v1/map", () => {
     const res = await route({ ...base, request: request("/v1/map"), getMap: async () => null });
     expect(res.status).toBe(503);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("map freshness on an open page", () => {
+  test("REQ-WEB-012 the Worker tells when its map was fetched", async () => {
+    const res = await route({
+      request: new Request("https://example.test/v1/map", { method: "HEAD" }),
+      regionCode: null,
+      getView: async () => ({ snapshot: null, rateLimitedUntil: null }),
+      getMap: async () => ({ bytes: new Uint8Array([1]), contentType: "image/png", fetchedAt: T0 }),
+      clock: () => T0,
+    });
+    expect(res.headers.get("x-map-fetched-at")).toBe(String(T0));
+  });
+
+  test("REQ-WEB-012 an open page asks for a newer map once its map trails the status by a minute", () => {
+    const snapshot = { ...snapshotWith([]), fetchedAt: T0 };
+    expect(mapBehind(null, snapshot)).toBe(true);
+    expect(mapBehind(T0 - 59_999, snapshot)).toBe(false);
+    expect(mapBehind(T0 - 60_000, snapshot)).toBe(true);
+    expect(mapBehind(T0, null)).toBe(false);
   });
 });

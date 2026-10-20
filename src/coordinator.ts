@@ -85,6 +85,8 @@ export class FeedCoordinator {
   private state: StoredState | null = null;
   private loading: Promise<StoredState> | null = null;
   private map: MapState | null = null;
+  /** A map attempt waiting for the upstream slot, so one is queued at most. */
+  private mapQueued: Promise<void> | null = null;
   /** The one upstream request of either kind, so the host never sees two at once. */
   private inFlight: Promise<void> | null = null;
 
@@ -119,29 +121,38 @@ export class FeedCoordinator {
     const now = this.deps.now();
     const windowOpen = state.rateLimitedUntil !== null && now < state.rateLimitedUntil;
     const floorPassed = map.lastAttemptAt === null || now - map.lastAttemptAt >= MAP_FLOOR_MS;
-    const sinceJson = state.lastAttemptAt === null ? Infinity : now - state.lastAttemptAt;
-    const wait = Math.max(0, MAP_AFTER_JSON_MS - sinceJson);
-    // Without an image, wait out the spacing; with one, serve it and let a later visitor refresh.
-    if (
-      this.inFlight === null &&
-      !windowOpen &&
-      floorPassed &&
-      (wait === 0 || map.image === null)
-    ) {
-      this.inFlight = this.attemptMap(state, map, wait).finally(() => {
-        this.inFlight = null;
+    // A page load starts a JSON attempt just before its map request arrives, so a due map is
+    // queued behind it rather than skipped: it waits for the slot and the spacing, then runs.
+    if (this.mapQueued === null && !windowOpen && floorPassed) {
+      this.mapQueued = this.queueMap(state, map).finally(() => {
+        this.mapQueued = null;
       });
-      this.deps.background(this.inFlight);
+      this.deps.background(this.mapQueued);
     }
-    if (this.inFlight !== null && map.image === null) {
-      await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
+    if (this.mapQueued !== null && map.image === null) {
+      await Promise.race([this.mapQueued, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
     }
     return map.image;
   }
 
-  /** Resolves once no upstream attempt is running. */
-  async idle(): Promise<void> {
+  private async queueMap(state: StoredState, map: MapState): Promise<void> {
     while (this.inFlight !== null) await this.inFlight;
+    const now = this.deps.now();
+    if (state.rateLimitedUntil !== null && now < state.rateLimitedUntil) return;
+    const sinceJson = state.lastAttemptAt === null ? Infinity : now - state.lastAttemptAt;
+    const wait = Math.max(0, MAP_AFTER_JSON_MS - sinceJson);
+    // The map holds the slot while it waits, so no JSON request slips in before it.
+    this.inFlight = this.attemptMap(state, map, wait).finally(() => {
+      this.inFlight = null;
+    });
+    await this.inFlight;
+  }
+
+  /** Resolves once no upstream attempt is running or queued. */
+  async idle(): Promise<void> {
+    while (this.inFlight !== null || this.mapQueued !== null) {
+      await (this.mapQueued ?? this.inFlight);
+    }
   }
 
   private load(): Promise<StoredState> {

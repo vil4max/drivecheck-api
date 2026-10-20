@@ -4,7 +4,7 @@ import { heroGraphic } from "../hero.ts";
 import { DEFAULT_REGION, type Lang, regionById } from "../regions.ts";
 import { type SwDeps, seedPage, seedStatic } from "../swStrategy.ts";
 import { VERSION } from "../version.ts";
-import { type StatusModel, statusModel } from "../view.ts";
+import { mapBehind, type StatusModel, statusModel } from "../view.ts";
 import { installAffordance } from "./install.ts";
 import { RefreshLoop } from "./refresh.ts";
 
@@ -141,8 +141,28 @@ function setUpStatus(): void {
   const region = regionById(hero.dataset.region ?? "") ?? DEFAULT_REGION;
   const lang = document.documentElement.lang as Lang;
   const last: { model: StatusModel | null } = { model: null };
-  const render = (snapshot: Snapshot | null) =>
+  let checkingMap = false;
+  const render = (snapshot: Snapshot | null) => {
     patch(statusModel(snapshot, region, lang, Date.now(), parsed.mapFetchedAt), last);
+    // A page left open keeps its first map; once that trails the status by a minute, take the
+    // Worker's newer one, so the map and the caption's count describe the same moment.
+    if (checkingMap || !mapBehind(parsed.mapFetchedAt, snapshot)) return;
+    checkingMap = true;
+    fetch("/v1/map", { method: "HEAD" })
+      .then((response) => {
+        const at = Number(response.headers.get("x-map-fetched-at"));
+        if (!response.ok || !Number.isFinite(at) || at <= (parsed.mapFetchedAt ?? 0)) return;
+        parsed.mapFetchedAt = at;
+        const image = document.querySelector<HTMLElement>("#map .image");
+        if (image !== null) image.style.backgroundImage = `url(/v1/map?at=${at})`;
+        byId("map")?.classList.remove("no-image", "is-failed");
+        patch(statusModel(snapshot, region, lang, Date.now(), at), last);
+      })
+      .catch(() => {})
+      .finally(() => {
+        checkingMap = false;
+      });
+  };
 
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   const loop = new RefreshLoop(

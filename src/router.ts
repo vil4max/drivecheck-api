@@ -79,6 +79,8 @@ function mapResponse(image: MapImage | null): Response {
     headers: {
       "content-type": image.contentType,
       "cache-control": "public, max-age=60",
+      // Lets an open page tell whether the map it shows is older than this one.
+      "x-map-fetched-at": String(image.fetchedAt),
       "x-content-type-options": "nosniff",
     },
   });
