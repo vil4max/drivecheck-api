@@ -101,6 +101,7 @@ describe("service worker strategy", () => {
     const world = new World();
     world.network = async (request) => {
       const url = new URL(request.url);
+      if (url.pathname === "/app/assets.json") return new Response("[]");
       return new Response(`offline ${url.searchParams.get("lang") ?? url.pathname}`);
     };
     await install(world.deps());
@@ -138,7 +139,8 @@ describe("service worker strategy", () => {
 
   test("REQ-WEB-008 static files come from a versioned cache that a new version replaces", async () => {
     const world = new World();
-    world.network = async () => new Response("v1 file");
+    world.network = async (request) =>
+      new Response(new URL(request.url).pathname === "/app/assets.json" ? "[]" : "v1 file");
     await install(world.deps("0.1.0"));
     expect(world.entries("static-0.1.0").sort()).toEqual([...PRECACHE].sort());
     await handle(get("/app/client/app.js"), world.deps("0.1.0"));
@@ -293,5 +295,23 @@ describe("install is all or nothing", () => {
       return path === "/app/view.js" ? new Response("gone", { status: 404 }) : new Response("ok");
     };
     await expect(install(world.deps("0.2.1"))).rejects.toThrow("/app/view.js");
+  });
+});
+
+describe("the module list is required", () => {
+  test("REQ-WEB-008 an install without its module list fails, so the old version and cache stay", async () => {
+    for (const list of [
+      async () => new Response("gone", { status: 404 }),
+      async () => new Response("not json"),
+      async () => new Response(JSON.stringify({ files: [] })),
+      async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ]) {
+      const world = new World();
+      world.network = async (request) =>
+        new URL(request.url).pathname === "/app/assets.json" ? list() : new Response("ok");
+      await expect(install(world.deps("0.2.1"))).rejects.toThrow(/assets\.json|Failed to fetch/);
+    }
   });
 });

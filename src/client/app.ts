@@ -4,7 +4,14 @@ import { heroGraphic } from "../hero.ts";
 import { DEFAULT_REGION, type Lang, regionById } from "../regions.ts";
 import { type SwDeps, seedPage, seedStatic } from "../swStrategy.ts";
 import { VERSION } from "../version.ts";
-import { mapBehind, type StatusModel, statusModel, swapMap } from "../view.ts";
+import {
+  mapBehind,
+  regionsModel,
+  type StatusModel,
+  staleAt,
+  statusModel,
+  swapMap,
+} from "../view.ts";
 import { installAffordance } from "./install.ts";
 import { RefreshLoop } from "./refresh.ts";
 
@@ -133,6 +140,32 @@ function patch(model: StatusModel, last: { model: StatusModel | null }): void {
   last.model = model;
 }
 
+/**
+ * Regions has no refresh loop; an open copy only re-marks itself "Last known" when its answer
+ * turns stale (REQ-REFRESH-006), with one timer and no request.
+ */
+function setUpRegions(): void {
+  const main = byId("main");
+  if (main?.dataset.page !== "regions" || main.dataset.state === undefined) return;
+  const { snapshot } = JSON.parse(main.dataset.state) as { snapshot: Snapshot | null };
+  const region = regionById(main.dataset.region ?? "") ?? DEFAULT_REGION;
+  const at = staleAt(snapshot);
+  if (at === null) return;
+  setTimeout(
+    () => {
+      const lang = document.documentElement.lang as Lang;
+      const model = regionsModel(snapshot, region, lang, null, Date.now());
+      const meta = main.querySelector(".meta");
+      if (meta !== null && model.meta !== null) meta.textContent = model.meta;
+      const card = main.querySelector(".current");
+      card?.classList.remove("accent-clear", "accent-alert", "accent-stale", "accent-unavailable");
+      card?.classList.add(`accent-${model.current.accent}`);
+      document.body.className = `accent-${model.current.accent}`;
+    },
+    Math.max(0, at - Date.now()),
+  );
+}
+
 function setUpStatus(): void {
   const main = byId("main");
   const hero = byId("hero");
@@ -198,3 +231,4 @@ registerServiceWorker();
 setUpInstall();
 setUpMap();
 setUpStatus();
+setUpRegions();

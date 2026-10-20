@@ -226,7 +226,7 @@ Worker-rendered `/offline?lang=` page (the Unavailable status in the Status layo
 `?lang=` or `Accept-Language` language; on install it saves that page for en, uk and ru, the
 manifest, the icons and every app module the build lists in `/app/assets.json`, in a cache named by
 the app version (`src/version.ts`, equal to `package.json`) that a new version replaces, and a file
-that fails to save fails the install, keeping the previous version; the first,
+that fails to save, or a missing module list, fails the install, keeping the previous version; the first,
 uncontrolled visit saves its own page and the app modules it loaded
 
 Reason: core "Never" forbids alert history; one overwritten entry is the same rule the coordinator
@@ -308,7 +308,8 @@ Given a visitor opens Regions from the map card or the address `/regions`\
 When it renders\
 Then it follows the iOS region list: the title "Regions" with a way back to Status, the current
 region in its own card with a location glyph and a status pill, the update time ("Updated HH:mm",
-or "Last known · Updated HH:mm" once stale, with a grey card for a quiet region),
+or "Last known · Updated HH:mm" once stale, with a grey card for a quiet region; an open page
+re-marks itself at that instant with one timer and no request),
 the regions under alert grouped
 first under "Alert Active · N" (shown only when there are any) and the rest under "Other regions",
 rows in catalog order, each a status dot and the name, the current row marked with the location

@@ -157,15 +157,19 @@ export async function handle(request: Request, deps: SwDeps): Promise<Response> 
   return isStatic ? cacheFirst(request, url.pathname, deps) : deps.fetch(request);
 }
 
+/**
+ * The version's module list. Without it the install fails: activating with no modules would drop
+ * the previous version's cache and leave the app unable to open offline.
+ */
 async function listedAssets(deps: SwDeps): Promise<string[]> {
+  const response = await deps.fetch(new Request(`${deps.origin}${ASSET_LIST}`));
+  if (!response.ok) throw new Error(`install: ${ASSET_LIST} answered ${response.status}`);
+  let list: unknown;
   try {
-    const response = await deps.fetch(new Request(`${deps.origin}${ASSET_LIST}`));
-    if (!response.ok) return [];
-    const list: unknown = await response.json();
-    return Array.isArray(list)
-      ? list.filter((p): p is string => typeof p === "string" && p.startsWith("/app/"))
-      : [];
+    list = await response.json();
   } catch {
-    return [];
+    throw new Error(`install: ${ASSET_LIST} is not JSON`);
   }
+  if (!Array.isArray(list)) throw new Error(`install: ${ASSET_LIST} is not a list`);
+  return list.filter((p): p is string => typeof p === "string" && p.startsWith("/app/"));
 }

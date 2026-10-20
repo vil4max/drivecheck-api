@@ -2,7 +2,7 @@ import type { Snapshot } from "./feed.ts";
 import type { Glyph } from "./glyphs.ts";
 import { STRINGS } from "./i18n.ts";
 import { type Lang, REGIONS, type Region } from "./regions.ts";
-import { checkedAt, isStale, statusView } from "./status.ts";
+import { checkedAt, isStale, STALE_AFTER_MS, statusView } from "./status.ts";
 
 /** The status colour, as iOS `StatusAccent`; theme.ts maps it to the palette. */
 export type Accent = "clear" | "alert" | "caution" | "stale" | "unavailable";
@@ -207,4 +207,9 @@ export function swapMap(
   const at = Number(fetchedAtHeader ?? Number.NaN);
   if (!Number.isFinite(at) || at <= (shownAt ?? Number.NEGATIVE_INFINITY)) return null;
   return { imageUrl: `/v1/map?at=${at}`, model: statusModel(snapshot, region, lang, now, at) };
+}
+
+/** The first instant an answer reads as stale (REQ-REFRESH-006); null without one. */
+export function staleAt(snapshot: Snapshot | null): number | null {
+  return snapshot === null ? null : checkedAt(snapshot) + STALE_AFTER_MS + 1;
 }

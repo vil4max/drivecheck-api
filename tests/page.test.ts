@@ -4,7 +4,7 @@ import { renderOffline, renderPage } from "../src/page";
 import { type Lang, regionById } from "../src/regions";
 import { renderRegions } from "../src/regionsPage";
 import { ACCENT, contrastRatio, over, PALETTE, STYLESHEET, SURFACE } from "../src/theme";
-import { regionsModel, statusModel } from "../src/view";
+import { regionsModel, staleAt, statusModel } from "../src/view";
 import { snapshotWith, T0 } from "./support";
 
 const key = (id: string) => regionById(id)!.apiKey;
@@ -281,5 +281,19 @@ describe("Regions shows its age", () => {
     const page = renderRegions(old);
     expect(page).toContain("Востаннє відоме · Оновлено 12:00");
     expect(regionsModel(null, region("kyiv-city"), "en", null, T0).meta).toBeNull();
+  });
+});
+
+describe("an open Regions page turns stale on time", () => {
+  test("REQ-REFRESH-006 REQ-WEB-013 the client re-marks Regions at the instant its answer turns stale", () => {
+    const snapshot = snapshotWith(["lviv"].map(key)); // checked at T0
+    const at = staleAt(snapshot);
+    expect(at).toBe(T0 + 120_001);
+    const before = regionsModel(snapshot, region("kyiv-city"), "en", null, at! - 1);
+    const after = regionsModel(snapshot, region("kyiv-city"), "en", null, at!);
+    expect(before.meta).toBe("Updated 12:00");
+    expect(after.meta).toBe("Last known · Updated 12:00");
+    expect(after.current.accent).toBe("stale");
+    expect(staleAt(null)).toBeNull();
   });
 });
