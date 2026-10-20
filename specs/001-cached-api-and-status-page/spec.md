@@ -116,6 +116,8 @@ Difference from iOS: the page has no Details tab; the note sits under the status
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by spec 002.
+
 Given an upstream fetch fails with a transient error (network failure or a 15 s timeout)\
 When the failure happens\
 Then the coordinator retries once after 2 s
@@ -125,6 +127,8 @@ Difference from iOS: a Worker sees a thrown `fetch` or an abort, not `URLError`.
 ### REQ-REFRESH-005 — Rate limit backoff
 
 Status: approved (iOS, 2026-09-17, amended 2026-10-15)
+
+Extended to the web client by spec 002.
 
 Given the provider returns HTTP 429\
 When the next upstream request would be due\
@@ -139,6 +143,8 @@ window is stored, so a restarted coordinator still honours it.
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by spec 002; the page's stale line now uses the iOS wording "Last known: {status} · HH:mm".
+
 Given a snapshot with `checkedAt` (server `cachedat`, else the backend's fetch time)\
 When `now − checkedAt` exceeds 2 × 60 s\
 Then the page keeps the last known alert phase and marks it as not current, and the API reports
@@ -149,6 +155,8 @@ Difference from iOS: the base interval is fixed at 60 s; the server has no power
 ### REQ-REFRESH-010 — Fetch floor and cache serving
 
 Status: approved (iOS, 2026-09-17)
+
+Extended to the web client by spec 002, "Web client parts of requirements defined in slice 1".
 
 Given an upstream attempt started less than 10 s ago, whatever its outcome\
 When any client asks\
@@ -165,6 +173,8 @@ a server shared by many clients would otherwise send one request per client to a
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by spec 002.
+
 Given a provider response\
 When it contains unknown keys or lacks the shown region\
 Then the page ignores unknown keys and shows "Region Unavailable" for a missing region, distinct
@@ -176,6 +186,8 @@ ignore them; only the page applies the catalog.
 ### REQ-SURF-005 — Nearby alerts in every status
 
 Status: approved (iOS, 2026-09-17)
+
+Extended to the web client by spec 002, which also shows at most two names and then "+N", as iOS does.
 
 Given neighbouring regions are under alert\
 When the page shows the current region, whether quiet or in alarm\
@@ -228,6 +240,8 @@ other two languages
 
 Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
 
+Amended 2026-10-20 by spec 002: REQ-WEB-004 puts the visitor's region cookie between `?region=` and the network region, and supersedes the sentence about no region picker.
+
 Given a page request\
 When `?region=` names a catalog region id, or else Cloudflare's `request.cf.regionCode` for a
 Ukrainian address maps to a region\
@@ -242,6 +256,8 @@ checks; the page offers no region picker, as the apps offer none since 2026-09-2
 ### REQ-WEB-003 — Accessible glanceable status
 
 Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+
+Amended 2026-10-20 by spec 002: REQ-WEB-005 lets the page load an external enhancing script; it still needs none, and no inline script runs.
 
 Given the page renders a status\
 When it is read by a screen reader or seen without colour\

@@ -160,7 +160,7 @@ browser evidence below, not by Vitest.
   SW registration, install button, Refresh without reload).
 
 ## Group 9: evidence, docs, review, PR
-- [ ] T017 Flip 002 REQs to approved; pointers in spec 001; README; gate `npm run check` and
+- [x] T017 Flip 002 REQs to approved; pointers in spec 001; README; gate `npm run check` and
   `npm run bundle`.
 - [ ] T018 Browser evidence on `wrangler dev` (local Worker; the real provider only through the
   coordinator): screenshots phone 375 px and desktop 1440 px, Status alarm/quiet/caution/stale and

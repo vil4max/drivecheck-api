@@ -1,10 +1,9 @@
 # Feature specification: installable web app
 
 Feature: `002-installable-web-app` · Created: 2026-10-20
-Status: draft, resumed on 2026-10-20 by the owner (O5) with the iOS design and the alert map in
-scope; waiting for the owner's approval of the revised plan. Requirements below are `proposed`
-until then; shared requirements keep the status the owner gave them in `regional-check` or in
-slice 1.
+Status: approved by the owner on 2026-10-20 with the revised plan (`plan.md`), after resuming the
+slice with the iOS design and the alert map in scope (O5). Shared requirements keep the status the
+owner gave them in `regional-check` or in slice 1.
 Input: the owner's decisions PD-107 (Drive Check is the multiplatform testbed of his agentic loops)
 and PD-108, option A (an installable web app served by the same Worker), and his answers of
 2026-10-20 (see "Owner decisions").
@@ -96,7 +95,7 @@ New in this repository; the text is the iOS one with the web's difference.
 
 ### REQ-REFRESH-001 — Fetch only for an active surface
 
-Status: proposed (approved in iOS on 2026-09-17; applies here once slice 2 resumes)
+Status: approved (iOS, 2026-09-17; for the web with the owner's plan approval, 2026-10-20)
 
 Given the web app's page is visible\
 When it opens, becomes visible again, or the person activates Refresh\
@@ -109,7 +108,7 @@ not add a request; becoming visible again does.
 
 ### REQ-REFRESH-002 — Adaptive shared polling interval
 
-Status: proposed (approved in iOS on 2026-09-17; applies here once slice 2 resumes)
+Status: approved (iOS, 2026-09-17; for the web with the owner's plan approval, 2026-10-20)
 
 Given the page is visible\
 When the next poll is scheduled\
@@ -144,7 +143,7 @@ definition; slice 2 extends each to the browser client, and tests of the client 
 
 ### REQ-WEB-004 — Region choice kept in the browser
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the Regions page renders\
 When the person picks a region from its list\
@@ -161,7 +160,7 @@ REQ-WEB-002's reason.
 
 ### REQ-WEB-005 — JavaScript enhances, never gates
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the page is served\
 When scripts are off, blocked or fail\
@@ -172,7 +171,7 @@ keeps being the text of the only `h1`
 
 ### REQ-WEB-006 — One data path for the client
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the client needs the status\
 When it makes any request\
@@ -185,7 +184,7 @@ Ubilling directly would bypass the floor and the 429 window.
 
 ### REQ-WEB-007 — Installable manifest
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given a browser checks whether the site is installable\
 When it reads the page and `/manifest.webmanifest`\
@@ -195,7 +194,7 @@ links it and an `apple-touch-icon` of 180 px
 
 ### REQ-WEB-008 — Service worker and offline
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the service worker is installed\
 When a page, `/v1/alerts` or `/v1/map` is requested\
@@ -209,7 +208,7 @@ follows (REQ-API-003).
 
 ### REQ-WEB-009 — Install affordance
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the page is not running as an installed app\
 When the browser offers installation (`beforeinstallprompt`, Chrome and Edge)\
@@ -218,7 +217,7 @@ event, a one-line hint names the menu path; when installed, both are absent
 
 ### REQ-WEB-010 — Scaling and keyboard
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given a person who enlarges text or uses a keyboard\
 When the page renders\
@@ -229,7 +228,7 @@ announced politely once, not on every refresh
 
 ### REQ-WEB-011 — The iOS Status design on the web
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given the web page or the web app shows the status\
 When it renders\
@@ -252,7 +251,7 @@ Reason: the owner, 2026-10-20, after seeing the slice 1 page: «нужна ка�
 
 ### REQ-WEB-012 — The alert map through the Worker
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given a page shows the map card\
 When the browser loads `GET /v1/map`\
@@ -272,7 +271,7 @@ honours its 429 for both (REQ-PROVIDER-002).
 
 ### REQ-WEB-013 — The Regions page
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given a visitor opens Regions from the map card or the address `/regions`\
 When it renders\
@@ -287,7 +286,7 @@ web the list is where the visitor picks the region (O8).
 
 ### REQ-WEB-014 — Responsive, fast, accessible showcase
 
-Status: proposed
+Status: approved (owner, 2026-10-20, with the revised plan)
 
 Given a visitor on a phone from 375 px wide up to a desktop\
 When the Status or Regions page renders\
@@ -299,7 +298,7 @@ browser and stated in the PR, with phone and desktop screenshots
 
 ### REQ-SURF-010 — A yellow "stay alert" status when alerts surround a quiet region
 
-Status: proposed (approved in iOS on 2026-09-17, amended 2026-09-23; applies here with O7)
+Status: approved (iOS, 2026-09-17, amended 2026-09-23; for the web with O7 and the plan approval, 2026-10-20)
 
 Given the shown region is quiet on fresh data and at least one neighbouring region is under alert\
 When half or more of its neighbours are under alert, or more than half of the country is, or, for
