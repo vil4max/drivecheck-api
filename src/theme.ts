@@ -104,7 +104,7 @@ main{display:flex;flex-direction:column;gap:1.25rem}
 .radar .disc{fill:var(--accent-soft);stroke:var(--accent-edge);stroke-width:1}
 .radar .glyph{color:var(--accent)}
 .radar .core{opacity:.28}
-@keyframes sweep{to{transform:rotate(-360deg)}}
+@keyframes sweep{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.radar .sweep{animation:none;transform:rotate(45deg)}}
 h1{margin:0;font-size:2.125rem;line-height:1.15;font-weight:700;letter-spacing:-.0375rem;color:var(--accent)}
 .region{margin:.875rem 0 0;font-size:1.25rem;font-weight:600;display:inline-flex;align-items:center;gap:.375rem;justify-content:center}

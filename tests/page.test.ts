@@ -142,6 +142,11 @@ describe("Status page", () => {
     expect(STYLESHEET).toContain("@supports (font:-apple-system-body)");
     expect(STYLESHEET).toContain(":focus-visible");
     expect(STYLESHEET).toContain("prefers-reduced-motion:reduce");
+    // Clockwise, as iOS rotationEffect(turn * 360) turns, with the afterglow trailing the beam.
+    expect(STYLESHEET).toContain("@keyframes sweep{to{transform:rotate(360deg)}}");
+    expect(STYLESHEET).toContain(
+      "conic-gradient(from 0deg,transparent 0 310deg,var(--accent-sweep) 360deg)",
+    );
     const page = html(["kyiv-city"]);
     expect(page.match(/aria-live/g)).toHaveLength(1);
     expect(page).toMatch(/<h1[^>]*aria-live="polite"/);
