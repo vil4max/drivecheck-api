@@ -23,7 +23,10 @@ function graph(entry: string): string[] {
 }
 
 function origins(files: string[]): string[] {
-  return files.flatMap((file) => readFileSync(file, "utf8").match(ORIGIN) ?? []);
+  // The SVG namespace in a data: URI names XML, it is never fetched.
+  return files
+    .flatMap((file) => readFileSync(file, "utf8").match(ORIGIN) ?? [])
+    .filter((origin) => origin !== "http://www.w3.org");
 }
 
 describe("client import graph", () => {

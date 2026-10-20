@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { OFFLINE_HEADER } from "../src/client/refresh";
 import { PAGE_CSP } from "../src/csp";
+import { renderPage } from "../src/page";
+import { regionById } from "../src/regions";
 import {
   activate,
   handle,
@@ -13,6 +15,8 @@ import {
   seedStatic,
 } from "../src/swStrategy";
 import { VERSION } from "../src/version";
+import { statusModel } from "../src/view";
+import { snapshotWith, T0 } from "./support";
 
 const ORIGIN = "https://drivecheck.example";
 
@@ -21,11 +25,13 @@ class World {
   caches = new Map<string, Map<string, Response>>();
   network: (request: Request) => Promise<Response> = async () => new Response("net");
   fetched: string[] = [];
+  now = T0;
 
   deps(version = VERSION): SwDeps {
     return {
       origin: ORIGIN,
       version,
+      now: () => this.now,
       fetch: (request) => {
         this.fetched.push(new URL(request.url).pathname);
         return this.network(request);
@@ -191,5 +197,54 @@ describe("service worker strategy", () => {
       version: string;
     };
     expect(VERSION).toBe(pkg.version);
+  });
+});
+
+describe("review repairs, M2", () => {
+  test("REQ-WEB-008 install saves every app module the build lists, per version", async () => {
+    const world = new World();
+    world.network = async (request) => {
+      const path = new URL(request.url).pathname;
+      return path === "/app/assets.json"
+        ? new Response(JSON.stringify(["/app/client/app.js", "/app/view.js"]))
+        : new Response(`file ${path}`);
+    };
+    await install(world.deps("0.2.1"));
+    expect(world.entries("static-0.2.1")).toEqual(
+      expect.arrayContaining(["/app/client/app.js", "/app/view.js"]),
+    );
+    world.network = offline;
+    expect(await (await handle(get("/app/view.js"), world.deps("0.2.1"))).text()).toBe(
+      "file /app/view.js",
+    );
+  });
+
+  test("REQ-REFRESH-006 a saved page served offline is redrawn for now, so old data never reads as fresh", async () => {
+    const world = new World();
+    const snapshot = snapshotWith([]); // checked at T0, quiet
+    const html = renderPage(statusModel(snapshot, regionById("kyiv-city")!, "en", T0, null), {
+      snapshot,
+      mapFetchedAt: null,
+    });
+    expect(html).toContain("Updated 12:00");
+    world.network = async () => new Response(html, { headers: { "content-type": "text/html" } });
+    await handle(page("/"), world.deps());
+    world.network = offline;
+    world.now = T0 + 3 * 3_600_000;
+    const res = await handle(page("/"), world.deps());
+    const text = await res.text();
+    expect(text).toContain("Last known: No Alert · 12:00");
+    expect(text).not.toContain("Updated 12:00");
+    expect(res.headers.get(OFFLINE_HEADER)).toBe("1");
+  });
+
+  test("REQ-WEB-008 a saved page without data is served as it was", async () => {
+    const world = new World();
+    world.network = async () => new Response("<html>regions</html>");
+    await handle(page("/regions"), world.deps());
+    world.network = offline;
+    expect(await (await handle(page("/regions"), world.deps())).text()).toBe(
+      "<html>regions</html>",
+    );
   });
 });

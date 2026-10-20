@@ -1,6 +1,7 @@
 import { OFFLINE_HEADER } from "./client/refresh.ts";
 import { PAGE_CSP } from "./csp.ts";
 import { negotiateLanguage } from "./i18n.ts";
+import { redrawSaved } from "./savedPage.ts";
 
 /** The part of the Cache API the strategy needs, keyed by path. */
 export interface CacheLike {
@@ -11,6 +12,7 @@ export interface CacheLike {
 export interface SwDeps {
   origin: string;
   version: string;
+  now: () => number;
   fetch: (request: Request) => Promise<Response>;
   open: (name: string) => Promise<CacheLike>;
   keys: () => Promise<string[]>;
@@ -35,10 +37,13 @@ const STATIC_FILES = ["/manifest.webmanifest"];
 
 const staticCache = (version: string) => `static-${version}`;
 
+/** The build lists every compiled app module here, so a version precaches its whole client. */
+export const ASSET_LIST = "/app/assets.json";
+
 export async function install(deps: SwDeps): Promise<void> {
   const cache = await deps.open(staticCache(deps.version));
   await Promise.all(
-    PRECACHE.map(async (path) => {
+    [...PRECACHE, ...(await listedAssets(deps))].map(async (path) => {
       const response = await deps.fetch(new Request(`${deps.origin}${path}`));
       if (response.ok) await cache.put(path, response);
     }),
@@ -107,7 +112,12 @@ async function networkFirst(request: Request, key: string, deps: SwDeps): Promis
     return response;
   } catch {
     const saved = await cache.match(key);
-    if (saved !== undefined) return markedOffline(saved);
+    if (saved !== undefined) {
+      if (!PAGES.includes(key)) return markedOffline(saved);
+      const headers = new Headers(saved.headers);
+      headers.set(OFFLINE_HEADER, "1");
+      return new Response(redrawSaved(await saved.text(), deps.now()), { headers });
+    }
     if (PAGES.includes(key)) {
       // The offline page in the visitor's language: the page's ?lang=, else Accept-Language.
       const lang = negotiateLanguage(
@@ -140,4 +150,17 @@ export async function handle(request: Request, deps: SwDeps): Promise<Response> 
   const isStatic =
     STATIC_FILES.includes(url.pathname) || STATIC_PREFIXES.some((p) => url.pathname.startsWith(p));
   return isStatic ? cacheFirst(request, url.pathname, deps) : deps.fetch(request);
+}
+
+async function listedAssets(deps: SwDeps): Promise<string[]> {
+  try {
+    const response = await deps.fetch(new Request(`${deps.origin}${ASSET_LIST}`));
+    if (!response.ok) return [];
+    const list: unknown = await response.json();
+    return Array.isArray(list)
+      ? list.filter((p): p is string => typeof p === "string" && p.startsWith("/app/"))
+      : [];
+  } catch {
+    return [];
+  }
 }

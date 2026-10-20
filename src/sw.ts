@@ -7,6 +7,7 @@ declare const self: ServiceWorkerGlobalScope;
 const deps: SwDeps = {
   origin: self.location.origin,
   version: VERSION,
+  now: () => Date.now(),
   fetch: (request) => fetch(request),
   open: (name) =>
     caches.open(name).then((cache) => ({

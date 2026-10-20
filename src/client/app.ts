@@ -31,6 +31,7 @@ function registerServiceWorker(): void {
       const deps: SwDeps = {
         origin: location.origin,
         version: VERSION,
+        now: () => Date.now(),
         fetch: (request) => fetch(request),
         open: (name) => caches.open(name),
         keys: () => caches.keys(),
