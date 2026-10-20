@@ -151,8 +151,8 @@ browser evidence below, not by Vitest.
 - [x] T012 Implement `src/client/refresh.ts`.
 
 ## Group 7: manifest, icons, service worker
-- [ ] T013 Test: `manifest.test.ts` (REQ-WEB-007), `swStrategy.test.ts` (REQ-WEB-008).
-- [ ] T014 Implement `public/**`, `src/swStrategy.ts`, `src/sw.ts`.
+- [x] T013 Test: `manifest.test.ts` (REQ-WEB-007), `swStrategy.test.ts` (REQ-WEB-008).
+- [x] T014 Implement `public/**`, `src/swStrategy.ts`, `src/sw.ts`.
 
 ## Group 8: install affordance and client wiring
 - [ ] T015 Test: `install.test.ts` proves REQ-WEB-009.

@@ -1,0 +1,10 @@
+/app/sw.js
+  Service-Worker-Allowed: /
+  Cache-Control: no-cache
+
+/app/*
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json
