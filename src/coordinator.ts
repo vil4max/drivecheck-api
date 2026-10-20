@@ -12,6 +12,30 @@ export type { Snapshot };
 export interface CoordinatorView {
   snapshot: Snapshot | null;
   rateLimitedUntil: number | null;
+  /** When the held map image was fetched; absent where a caller has no map (slice 1 views). */
+  mapFetchedAt?: number | null;
+}
+
+/** The provider's night-mode alert map, as the iOS card loads it (`MapImageSource`). */
+export const MAP_ENDPOINT = `${ENDPOINT}?map=nightmode`;
+/** The map changes with the alerts but nobody needs it more often than once a minute. */
+export const MAP_FLOOR_MS = 60_000;
+
+export interface MapImage {
+  bytes: Uint8Array;
+  contentType: string;
+  fetchedAt: number;
+}
+
+/** The map's single stored record, overwritten like the snapshot's (REQ-API-003). */
+export interface MapState {
+  image: MapImage | null;
+  lastAttemptAt: number | null;
+}
+
+export interface MapStore {
+  load(): Promise<MapState | undefined>;
+  save(state: MapState): Promise<void>;
 }
 
 /** The single stored record (REQ-API-003): overwritten on every attempt, never appended. */
@@ -32,6 +56,7 @@ export interface CoordinatorDeps {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   store: StateStore;
+  mapStore: MapStore;
   /** Resolves when a caller without any snapshot stops waiting for the upstream. */
   waitCap: (ms: number) => Promise<void>;
   /** Keeps an attempt running after its caller got the held snapshot. */
@@ -52,6 +77,8 @@ class TransientFailure extends Error {}
 export class FeedCoordinator {
   private state: StoredState | null = null;
   private loading: Promise<StoredState> | null = null;
+  private map: MapState | null = null;
+  /** The one upstream request of either kind, so the host never sees two at once. */
   private inFlight: Promise<void> | null = null;
 
   constructor(private readonly deps: CoordinatorDeps) {}
@@ -68,7 +95,33 @@ export class FeedCoordinator {
     if (this.inFlight !== null && state.snapshot === null) {
       await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
     }
-    return { snapshot: state.snapshot, rateLimitedUntil: this.openWindow(state) };
+    const map = await this.loadMap();
+    return {
+      snapshot: state.snapshot,
+      rateLimitedUntil: this.openWindow(state),
+      mapFetchedAt: map.image?.fetchedAt ?? null,
+    };
+  }
+
+  /**
+   * The alert map (REQ-WEB-012). It takes the same single upstream slot as the JSON request, so
+   * the two never overlap, and it obeys and feeds the same 429 window.
+   */
+  async currentMap(): Promise<MapImage | null> {
+    const [state, map] = await Promise.all([this.load(), this.loadMap()]);
+    const now = this.deps.now();
+    const windowOpen = state.rateLimitedUntil !== null && now < state.rateLimitedUntil;
+    const floorPassed = map.lastAttemptAt === null || now - map.lastAttemptAt >= MAP_FLOOR_MS;
+    if (this.inFlight === null && !windowOpen && floorPassed) {
+      this.inFlight = this.attemptMap(state, map).finally(() => {
+        this.inFlight = null;
+      });
+      this.deps.background(this.inFlight);
+    }
+    if (this.inFlight !== null && map.image === null) {
+      await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
+    }
+    return map.image;
   }
 
   /** Resolves once no upstream attempt is running. */
@@ -94,6 +147,55 @@ export class FeedCoordinator {
       },
     );
     return this.loading;
+  }
+
+  // An unreadable map record is not worth failing for: the map is refetched within a minute.
+  private async loadMap(): Promise<MapState> {
+    if (this.map !== null) return this.map;
+    let stored: MapState | undefined;
+    try {
+      stored = await this.deps.mapStore.load();
+    } catch (error) {
+      this.deps.log?.(`map load failed: ${(error as Error).message}`);
+    }
+    this.map ??= stored ?? { image: null, lastAttemptAt: null };
+    return this.map;
+  }
+
+  private async attemptMap(state: StoredState, map: MapState): Promise<void> {
+    map.lastAttemptAt = this.deps.now();
+    try {
+      const timeoutSignal = this.deps.timeoutSignal ?? ((ms) => AbortSignal.timeout(ms));
+      const response = await this.deps.fetch(MAP_ENDPOINT, {
+        headers: { "user-agent": USER_AGENT, accept: "image/*" },
+        signal: timeoutSignal(UPSTREAM_TIMEOUT_MS),
+      });
+      if (response.status === 429) {
+        state.rateLimitStreak += 1;
+        state.rateLimitedUntil = rateLimitDeadline(
+          response.headers.get("retry-after"),
+          this.deps.now(),
+          state.rateLimitStreak,
+        );
+        await this.save(state);
+        throw new Error("map HTTP 429");
+      }
+      if (!response.ok) throw new Error(`map HTTP ${response.status}`);
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.startsWith("image/")) throw new Error(`map content type ${contentType}`);
+      map.image = {
+        bytes: new Uint8Array(await response.arrayBuffer()),
+        contentType,
+        fetchedAt: this.deps.now(),
+      };
+    } catch (error) {
+      this.deps.log?.(`map attempt failed: ${(error as Error).message}`);
+    }
+    try {
+      await this.deps.mapStore.save(map);
+    } catch (error) {
+      this.deps.log?.(`map save failed, kept in memory: ${(error as Error).message}`);
+    }
   }
 
   private mayAttempt(state: StoredState, now: number): boolean {

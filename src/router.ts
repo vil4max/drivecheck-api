@@ -1,5 +1,5 @@
 import { alertsResponse } from "./api.ts";
-import type { CoordinatorView } from "./coordinator.ts";
+import type { CoordinatorView, MapImage } from "./coordinator.ts";
 import { negotiateLanguage } from "./i18n.ts";
 import { renderPage } from "./page.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
@@ -10,6 +10,7 @@ export interface RouteInput {
   /** `request.cf.regionCode`, only when Cloudflare places the address in Ukraine. */
   regionCode: string | null;
   getView: () => Promise<CoordinatorView>;
+  getMap: () => Promise<MapImage | null>;
   /** Read after the view arrives, so ages and Retry-After count from the answer, not the request. */
   clock: () => number;
 }
@@ -29,19 +30,38 @@ function pickRegion(query: string | null, regionCode: string | null): Region {
   );
 }
 
+/** `GET /v1/map`: the held raster, or 503 and nothing older (REQ-WEB-012). */
+function mapResponse(image: MapImage | null): Response {
+  if (image === null) {
+    return new Response("Map unavailable", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+  return new Response(image.bytes, {
+    headers: {
+      "content-type": image.contentType,
+      "cache-control": "public, max-age=60",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
 export async function route({
   request,
   regionCode,
   getView,
+  getMap,
   clock,
 }: RouteInput): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname !== "/" && url.pathname !== "/v1/alerts") {
+  if (!["/", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
+  if (url.pathname === "/v1/map") return mapResponse(await getMap());
   const view = await getView();
   const now = clock();
   if (url.pathname === "/v1/alerts") return alertsResponse(view, now);

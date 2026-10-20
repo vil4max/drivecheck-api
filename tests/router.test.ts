@@ -29,6 +29,7 @@ function call({
   return route({
     request: new Request(`https://drivecheck.example${path}`, { method, headers }),
     regionCode,
+    getMap: async () => null,
     getView: async () => {
       clock += viewDelayMs;
       return view ?? fallback;

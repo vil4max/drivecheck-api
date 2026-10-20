@@ -131,8 +131,8 @@ browser evidence below, not by Vitest.
 - [x] T004 Implement caution phase and `isSurrounded`. Files: `src/status.ts`
 
 ## Group 3: map through the coordinator
-- [ ] T005 Test: coordinator and router tests prove REQ-WEB-012 (server part).
-- [ ] T006 Implement `currentMap`, `MapStore`, `/v1/map`, worker binding. Files:
+- [x] T005 Test: coordinator and router tests prove REQ-WEB-012 (server part).
+- [x] T006 Implement `currentMap`, `MapStore`, `/v1/map`, worker binding. Files:
   `src/coordinator.ts`, `src/worker.ts`, `src/router.ts`
 
 ## Group 4: region choice and Regions page
