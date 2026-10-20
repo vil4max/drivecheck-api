@@ -110,7 +110,8 @@ describe("GET /", () => {
     expect(html).toMatch(/<h1[^>]*>Air Raid Alert<\/h1>/);
     expect(html).toContain("Kyiv");
     expect(html).toContain("Updated 12:00");
-    expect(html).not.toContain("<script");
+    // Spec 002 REQ-WEB-005: an external enhancing module is allowed, inline code is not.
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
   });
 
   test("REQ-WEB-003 escapes every HTML-significant character in rendered text", () => {
@@ -138,7 +139,8 @@ describe("GET /", () => {
         view: { snapshot: snapshotWith(["Київська область"]), rateLimitedUntil: null },
       })
     ).text();
-    expect(quiet).toMatch(/<h1[^>]*>No Alert<\/h1>/);
+    // Kyiv Oblast alone makes Kyiv city Stay Alert (REQ-SURF-010, spec 002).
+    expect(quiet).toMatch(/<h1[^>]*>Stay Alert<\/h1>/);
     expect(quiet).toContain("Nearby: Kyiv Oblast");
     const none = await (await call({ path: "/?lang=en" })).text();
     expect(none).not.toContain("Nearby");
@@ -153,7 +155,7 @@ describe("GET /", () => {
     const view = { snapshot: snapshotWith(["м. Київ"]), rateLimitedUntil: null };
     const html = await (await call({ path: "/?lang=en", view, now: T0 + 600_000 })).text();
     expect(html).toMatch(/<h1[^>]*>Air Raid Alert<\/h1>/);
-    expect(html).toContain("Last known · Updated 12:00");
+    expect(html).toContain("Last known: Air Raid Alert · 12:00");
   });
 
   test("REQ-API-002 the page shows Unavailable with 503 when there is no snapshot", async () => {

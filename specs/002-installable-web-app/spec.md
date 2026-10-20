@@ -258,7 +258,9 @@ Given a page shows the map card\
 When the browser loads `GET /v1/map`\
 Then the Worker answers with the latest held Ubilling `?map=nightmode` raster (1000 × 670); the
 coordinator asks the provider for it only when a client asks and the held image is older than
-60 s, never while a JSON request is in flight or a 429 window is open, keeps one overwritten
+60 s, never while a JSON request is in flight or a 429 window is open, never sooner than 3 s
+after a JSON request (as iOS loads its map 3 s after the status; without an image it waits that
+long), and a JSON request keeps 1 s clear of a map request; it keeps one overwritten
 image, and answers 503 when it holds none; the card reserves the 1000 : 670 frame, shows the
 caption "N of 25 regions under alert · N min ago" (age from the image's own fetch time) and an
 accessible label naming the regions under alert, and its whole surface links to the Regions page;

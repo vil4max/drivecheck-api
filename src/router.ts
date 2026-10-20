@@ -4,7 +4,8 @@ import { negotiateLanguage } from "./i18n.ts";
 import { renderPage } from "./page.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
-import { statusView } from "./status.ts";
+import { renderRegions } from "./regionsPage.ts";
+import { regionsModel, statusModel } from "./view.ts";
 
 export interface RouteInput {
   request: Request;
@@ -74,7 +75,7 @@ export async function route({
 }: RouteInput): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/region" && request.method === "POST") return chooseRegion(request);
-  if (!["/", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
+  if (!["/", "/regions", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -94,17 +95,32 @@ export async function route({
     request.headers.get("cookie"),
     regionCode,
   );
-  const status = statusView(view.snapshot, region, now);
-  return new Response(renderPage(status, lang), {
+  const html =
+    url.pathname === "/regions"
+      ? renderRegions(regionsModel(view.snapshot, region, lang))
+      : renderPage(statusModel(view.snapshot, region, lang, now, view.mapFetchedAt ?? null));
+  return new Response(html, {
     status: view.snapshot === null ? 503 : 200,
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "private, max-age=10",
       vary: "Accept-Language, Cookie",
-      "content-security-policy":
-        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+      "content-security-policy": PAGE_CSP,
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
     },
   });
 }
+
+/** Everything from this origin only (REQ-WEB-006); `data:` for the CSS-drawn location glyph. */
+export const PAGE_CSP = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join("; ");

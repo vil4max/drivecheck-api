@@ -20,6 +20,13 @@ export interface CoordinatorView {
 export const MAP_ENDPOINT = `${ENDPOINT}?map=nightmode`;
 /** The map changes with the alerts but nobody needs it more often than once a minute. */
 export const MAP_FLOOR_MS = 60_000;
+/**
+ * Ubilling allows 2 requests per second per host and answered a map request sent 0.3 s after the
+ * JSON one with 429. iOS loads the map 3 s after the status; the web keeps that spacing, and a
+ * JSON request keeps a second clear of a map request.
+ */
+export const MAP_AFTER_JSON_MS = 3_000;
+export const JSON_AFTER_MAP_MS = 1_000;
 
 export interface MapImage {
   bytes: Uint8Array;
@@ -112,8 +119,16 @@ export class FeedCoordinator {
     const now = this.deps.now();
     const windowOpen = state.rateLimitedUntil !== null && now < state.rateLimitedUntil;
     const floorPassed = map.lastAttemptAt === null || now - map.lastAttemptAt >= MAP_FLOOR_MS;
-    if (this.inFlight === null && !windowOpen && floorPassed) {
-      this.inFlight = this.attemptMap(state, map).finally(() => {
+    const sinceJson = state.lastAttemptAt === null ? Infinity : now - state.lastAttemptAt;
+    const wait = Math.max(0, MAP_AFTER_JSON_MS - sinceJson);
+    // Without an image, wait out the spacing; with one, serve it and let a later visitor refresh.
+    if (
+      this.inFlight === null &&
+      !windowOpen &&
+      floorPassed &&
+      (wait === 0 || map.image === null)
+    ) {
+      this.inFlight = this.attemptMap(state, map, wait).finally(() => {
         this.inFlight = null;
       });
       this.deps.background(this.inFlight);
@@ -162,7 +177,8 @@ export class FeedCoordinator {
     return this.map;
   }
 
-  private async attemptMap(state: StoredState, map: MapState): Promise<void> {
+  private async attemptMap(state: StoredState, map: MapState, wait: number): Promise<void> {
+    if (wait > 0) await this.deps.sleep(wait);
     map.lastAttemptAt = this.deps.now();
     try {
       const timeoutSignal = this.deps.timeoutSignal ?? ((ms) => AbortSignal.timeout(ms));
@@ -200,6 +216,8 @@ export class FeedCoordinator {
 
   private mayAttempt(state: StoredState, now: number): boolean {
     if (state.rateLimitedUntil !== null && now < state.rateLimitedUntil) return false;
+    const mapAt = this.map?.lastAttemptAt ?? null;
+    if (mapAt !== null && now - mapAt < JSON_AFTER_MAP_MS) return false;
     return state.lastAttemptAt === null || now - state.lastAttemptAt >= FETCH_FLOOR_MS;
   }
 

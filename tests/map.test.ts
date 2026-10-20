@@ -65,6 +65,40 @@ describe("alert map through the coordinator", () => {
     expect(world.requests.at(-1)).toBe(MAP_ENDPOINT);
   });
 
+  test("REQ-WEB-012 the map waits 3 s after a JSON request, as iOS does after the status", async () => {
+    const { world, c } = setup();
+    world.queue(jsonResponse(feedJson()), imageResponse([1]), imageResponse([2]));
+    await c.current();
+    world.now += 500;
+    expect(await bytesOf(await c.currentMap())).toEqual([1]);
+    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT]);
+    expect(world.sleeps).toEqual([2_500]);
+
+    // With an image held, a map refresh that is too close to a JSON request is simply skipped.
+    world.now += 60_000;
+    world.queue(jsonResponse(feedJson()));
+    await c.current();
+    await c.idle();
+    world.now += 1_000;
+    expect(await bytesOf(await c.currentMap())).toEqual([1]);
+    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT, ENDPOINT]);
+  });
+
+  test("REQ-WEB-012 a JSON request waits a second after a map request", async () => {
+    const { world, c } = setup();
+    world.queue(jsonResponse(feedJson()), imageResponse([1]));
+    await c.current();
+    world.now += 9_600;
+    await c.currentMap();
+    world.now += 500; // the JSON floor has passed, but the map request was 500 ms ago
+    await c.current();
+    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT]);
+    world.now += 500;
+    world.queue(jsonResponse(feedJson()));
+    await c.current();
+    expect(world.requests).toEqual([ENDPOINT, MAP_ENDPOINT, ENDPOINT]);
+  });
+
   test("REQ-WEB-012 a map 429 holds the JSON requests too", async () => {
     const { world, c } = setup();
     world.queue(imageResponse([1], { status: 429, headers: { "retry-after": "30" } }));
