@@ -253,3 +253,18 @@ describe("offline page", () => {
     expect(renderOffline("en")).toContain("No connection, and no saved status yet.");
   });
 });
+
+describe("review repairs, M3", () => {
+  test("REQ-WEB-010 Regions rows draw their focus ring inside the rounded group, which clips", () => {
+    expect(STYLESHEET).toContain(".group{margin:0;padding:0;list-style:none;overflow:hidden}");
+    expect(STYLESHEET).toContain(".row:focus-visible{outline-offset:-3px");
+  });
+
+  test("REQ-WEB-014 nothing hides horizontal overflow, so a too-wide layout shows", () => {
+    expect(STYLESHEET).not.toContain("overflow-x:hidden");
+    // Only the decorative glow is clipped, at the hero; the radar never outgrows the column.
+    expect(STYLESHEET).toMatch(/\.hero\{[^}]*overflow-x:clip\}/);
+    expect(STYLESHEET).toContain(".current{display:flex;flex-wrap:wrap");
+    expect(STYLESHEET).toContain(".radar{position:relative;width:min(9.75rem,100%);aspect-ratio:1");
+  });
+});
