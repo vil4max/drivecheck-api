@@ -136,19 +136,19 @@ browser evidence below, not by Vitest.
   `src/coordinator.ts`, `src/worker.ts`, `src/router.ts`
 
 ## Group 4: region choice and Regions page
-- [ ] T007 Test: router and `regionsPage.test.ts` prove REQ-WEB-004 and REQ-WEB-013.
-- [ ] T008 Implement `regionCookie.ts`, `regionsPage.ts`, routes. Files: `src/regionCookie.ts`,
+- [x] T007 Test: router and `regionsPage.test.ts` prove REQ-WEB-004 and REQ-WEB-013.
+- [x] T008 Implement `regionCookie.ts`, `regionsPage.ts`, routes. Files: `src/regionCookie.ts`,
   `src/regionsPage.ts`, `src/router.ts`
 
 ## Group 5: iOS design for Status
-- [ ] T009 Test: `page.test.ts`, `theme.test.ts` prove REQ-WEB-011, REQ-WEB-005, REQ-WEB-010,
+- [x] T009 Test: `page.test.ts`, `theme.test.ts` prove REQ-WEB-011, REQ-WEB-005, REQ-WEB-010,
   REQ-WEB-014 (static part), REQ-REGION-001, REQ-SURF-005, map card part of REQ-WEB-012, CSP.
-- [ ] T010 Implement `theme.ts`, `glyphs.ts`, `hero.ts`, `view.ts`, `page.ts`, strings. Files:
+- [x] T010 Implement `theme.ts`, `glyphs.ts`, `hero.ts`, `view.ts`, `page.ts`, strings. Files:
   `src/theme.ts`, `src/glyphs.ts`, `src/hero.ts`, `src/view.ts`, `src/page.ts`, `src/i18n.ts`
 
 ## Group 6: refresh loop
-- [ ] T011 Test: `refresh.test.ts` proves REQ-REFRESH-001/002/003/005/006/010, REQ-WEB-006 (requests).
-- [ ] T012 Implement `src/client/refresh.ts`.
+- [x] T011 Test: `refresh.test.ts` proves REQ-REFRESH-001/002/003/005/006/010, REQ-WEB-006 (requests).
+- [x] T012 Implement `src/client/refresh.ts`.
 
 ## Group 7: manifest, icons, service worker
 - [ ] T013 Test: `manifest.test.ts` (REQ-WEB-007), `swStrategy.test.ts` (REQ-WEB-008).
