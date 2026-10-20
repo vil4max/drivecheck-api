@@ -217,6 +217,21 @@ available, the Dynamic Type equivalent), the layout reflows without horizontal s
 and 320 px, every control is reachable by Tab with a visible focus ring, and a status change is
 announced politely once, not on every refresh
 
+### REQ-WEB-011 — The iOS Status design on the web
+
+Status: proposed
+
+Given the web page or the web app shows the status\
+When it renders\
+Then it follows the iOS phone Status tab as the reference, one look on every surface: the same
+layout, hierarchy, typography and palette, and the inline alert map (`MapCardView`, the upstream
+raster with its fetch time and an accessible label) fetched through the Worker, never from the
+browser to the provider
+
+Reason: the owner, 2026-10-20, after seeing the slice 1 page: «нужна карта и брать за референс иос
+дизайн - везде один вид». The slice 1 page shares only the palette and reads as a sketch. Open
+before planning: how the Worker serves the map raster within the provider's polite-load rules.
+
 ## Decisions, with reasons
 
 ### D5 — Client build: TypeScript compiled by `tsc`, served as static assets
