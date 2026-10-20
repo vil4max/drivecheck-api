@@ -1,5 +1,6 @@
 import { alertsResponse } from "./api.ts";
 import type { CoordinatorView, MapImage } from "./coordinator.ts";
+import { PAGE_CSP } from "./csp.ts";
 import { LANGS, negotiateLanguage } from "./i18n.ts";
 import { renderPage } from "./page.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
@@ -41,15 +42,16 @@ function pickRegion(
 /** `POST /region` from the Regions page without JavaScript: remember, then show Status. */
 async function chooseRegion(request: Request): Promise<Response> {
   // Only the visitor, from this site, picks their region: SameSite=Lax still lets another site
-  // post a top-level form here, so cross-site posts are refused.
+  // post a top-level form here, so cross-site posts are refused. Sec-Fetch-Site decides when the
+  // browser sends it; the site's own form arrives with Origin "null" because its pages use
+  // referrer-policy: no-referrer, so Origin only judges older browsers that name a real origin.
   const site = request.headers.get("sec-fetch-site");
   const origin = request.headers.get("origin");
-  if (
-    (site !== null && site !== "same-origin") ||
-    (origin !== null && origin !== new URL(request.url).origin)
-  ) {
-    return new Response("Forbidden", { status: 403 });
-  }
+  const foreign =
+    site !== null
+      ? site !== "same-origin"
+      : origin !== null && origin !== "null" && origin !== new URL(request.url).origin;
+  if (foreign) return new Response("Forbidden", { status: 403 });
   const form = new URLSearchParams(await request.text());
   const region = regionById(form.get("region") ?? "");
   if (region === undefined) return new Response("Unknown region", { status: 400 });
@@ -132,17 +134,3 @@ export async function route({
     },
   });
 }
-
-/** Everything from this origin only (REQ-WEB-006); `data:` for the CSS-drawn location glyph. */
-export const PAGE_CSP = [
-  "default-src 'none'",
-  "script-src 'self'",
-  "style-src 'unsafe-inline'",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "worker-src 'self'",
-  "manifest-src 'self'",
-  "base-uri 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");

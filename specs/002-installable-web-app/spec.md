@@ -96,6 +96,7 @@ New in this repository; the text is the iOS one with the web's difference.
 ### REQ-REFRESH-001 — Fetch only for an active surface
 
 Status: approved (iOS, 2026-09-17; for the web with the owner's plan approval, 2026-10-20)
+Refined during implementation; see O9 under "Owner decisions", awaiting the owner's confirmation.
 
 Given the web app's page is visible\
 When it opens, becomes visible again, or the person activates Refresh\
@@ -147,6 +148,7 @@ definition; slice 2 extends each to the browser client, and tests of the client 
 ### REQ-WEB-004 — Region choice kept in the browser
 
 Status: approved (owner, 2026-10-20, with the revised plan)
+Refined during implementation; see O9 under "Owner decisions", awaiting the owner's confirmation.
 
 Given the Regions page renders\
 When the person picks a region from its list\
@@ -198,6 +200,7 @@ links it and an `apple-touch-icon` of 180 px
 ### REQ-WEB-008 — Service worker and offline
 
 Status: approved (owner, 2026-10-20, with the revised plan)
+Refined during implementation; see O9 under "Owner decisions", awaiting the owner's confirmation.
 
 Given the service worker is installed\
 When a page, `/v1/alerts` or `/v1/map` is requested\
@@ -255,6 +258,7 @@ Reason: the owner, 2026-10-20, after seeing the slice 1 page: «нужна ка�
 ### REQ-WEB-012 — The alert map through the Worker
 
 Status: approved (owner, 2026-10-20, with the revised plan)
+Refined during implementation; see O9 under "Owner decisions", awaiting the owner's confirmation.
 
 Given a page shows the map card\
 When the browser loads `GET /v1/map`\

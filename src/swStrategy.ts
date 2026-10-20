@@ -1,4 +1,5 @@
 import { OFFLINE_HEADER } from "./client/refresh.ts";
+import { PAGE_CSP } from "./csp.ts";
 
 /** The part of the Cache API the strategy needs, keyed by path. */
 export interface CacheLike {
@@ -67,8 +68,30 @@ export async function seedPage(
   html: string,
 ): Promise<void> {
   if (!PAGES.includes(path)) return;
-  const response = new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  const response = new Response(html, {
+    headers: { "content-type": "text/html; charset=utf-8", "content-security-policy": PAGE_CSP },
+  });
   await (await deps.open(DATA_CACHE)).put(path, response);
+}
+
+/**
+ * Saves the app modules the first, uncontrolled visit loaded (it names them from the browser's
+ * resource timing), so the saved page opens offline with its script and marks its age.
+ */
+export async function seedStatic(deps: SwDeps, urls: readonly string[]): Promise<void> {
+  const cache = await deps.open(staticCache(deps.version));
+  await Promise.all(
+    urls.map(async (raw) => {
+      const url = new URL(raw);
+      if (url.origin !== deps.origin || !url.pathname.startsWith("/app/")) return;
+      try {
+        const response = await deps.fetch(new Request(url.href));
+        if (response.ok) await cache.put(url.pathname, response);
+      } catch {
+        // Offline already; the next online visit fills the cache through the worker.
+      }
+    }),
+  );
 }
 
 async function networkFirst(request: Request, key: string, deps: SwDeps): Promise<Response> {

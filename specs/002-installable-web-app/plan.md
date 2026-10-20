@@ -167,7 +167,7 @@ browser evidence below, not by Vitest.
   Regions, beside the iOS reference; no-JS check; keyboard pass; SW active, install offered,
   offline reload; FCP/LCP from `PerformanceObserver` on a cold load (local now, deployed after the
   owner's deploy yes). Saved in `build/review/runtime/`, committed shots in `docs/screenshots/`.
-- [ ] T019 `spec-driven-dev:code-reviewer`, repairs (at most two rounds), PR with the review packet
+- [x] T019 `spec-driven-dev:code-reviewer`, repairs (at most two rounds), PR with the review packet
   and screenshots; one-line status to ★ orch · Lead. No deploy without the owner's yes.
 
 ## Review lows
@@ -194,3 +194,11 @@ From the independent review of b988ab9 (not fixed unless the owner asks):
 `npm run check` (three typechecks, Biome, Vitest, trace with every 002 REQ approved and cited) and
 `npm run bundle` green; T018 evidence recorded, side by side with the iOS reference; CI Gate green
 on the PR; the deployed FCP/LCP measured after the owner approves the deploy.
+
+From the second review pass of 1f1e70d (lows, not fixed):
+- The browser wiring of the first-visit seed (skip for `?region=`, skip when uncontrolled) has no
+  unit test; it was checked by hand in Chrome (runtime evidence, "Round 2").
+- `.failed` sits under the map image on `no-image` pages; the night map seen so far is opaque, so
+  a late image covers the text, but a transparent raster would show both.
+Fixed in passing in round 2: the seeded page carries the page CSP, and a page rendered without
+data is never seeded.

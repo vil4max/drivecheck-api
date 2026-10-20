@@ -280,17 +280,18 @@ describe("review repairs", () => {
     for (const headers of [
       { "sec-fetch-site": "cross-site" },
       { "sec-fetch-site": "same-site" },
+      { "sec-fetch-site": "cross-site", origin: "null" },
       { origin: "https://evil.example" },
     ]) {
       const res = await post(headers);
       expect(res.status).toBe(403);
       expect(res.headers.get("set-cookie")).toBeNull();
     }
-    const own = await post({
-      "sec-fetch-site": "same-origin",
-      origin: "https://drivecheck.example",
-    });
+    // The site's own form, as browsers send it under referrer-policy: no-referrer.
+    const own = await post({ "sec-fetch-site": "same-origin", origin: "null" });
     expect(own.status).toBe(303);
+    const older = await post({ origin: "https://drivecheck.example" });
+    expect(older.status).toBe(303);
   });
 
   test("REQ-WEB-006 the page allows its own origin only and cannot be framed", async () => {

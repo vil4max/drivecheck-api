@@ -2,7 +2,8 @@ import type { Snapshot } from "../feed.ts";
 import { glyph } from "../glyphs.ts";
 import { heroGraphic } from "../hero.ts";
 import { DEFAULT_REGION, type Lang, regionById } from "../regions.ts";
-import { seedPage } from "../swStrategy.ts";
+import { type SwDeps, seedPage, seedStatic } from "../swStrategy.ts";
+import { VERSION } from "../version.ts";
 import { type StatusModel, statusModel } from "../view.ts";
 import { installAffordance } from "./install.ts";
 import { RefreshLoop } from "./refresh.ts";
@@ -25,9 +26,23 @@ function registerServiceWorker(): void {
   // tsc emits ES modules, so the worker is a module worker (Chrome, Edge, Safari 16+).
   navigator.serviceWorker
     .register("/app/sw.js", { scope: "/", type: "module" })
-    .then(() => {
-      if (!firstVisit || new URLSearchParams(location.search).has("region")) return;
-      return seedPage({ open: (name) => caches.open(name) }, location.pathname, html);
+    .then(async () => {
+      if (!firstVisit) return;
+      const deps: SwDeps = {
+        origin: location.origin,
+        version: VERSION,
+        fetch: (request) => fetch(request),
+        open: (name) => caches.open(name),
+        keys: () => caches.keys(),
+        delete: (name) => caches.delete(name),
+      };
+      const loaded = performance.getEntriesByType("resource").map((entry) => entry.name);
+      await seedStatic(deps, loaded);
+      // A page rendered without data ("Unavailable") must not replace a saved status.
+      const state = byId("main")?.dataset.state;
+      const empty = state !== undefined && JSON.parse(state).snapshot === null;
+      if (empty || new URLSearchParams(location.search).has("region")) return;
+      await seedPage(deps, location.pathname, html);
     })
     .catch(() => {
       // Offline support is an enhancement; the page works without it.

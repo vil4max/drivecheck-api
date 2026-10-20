@@ -2,7 +2,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { OFFLINE_HEADER } from "../src/client/refresh";
-import { activate, handle, install, PRECACHE, type SwDeps, seedPage } from "../src/swStrategy";
+import { PAGE_CSP } from "../src/csp";
+import {
+  activate,
+  handle,
+  install,
+  PRECACHE,
+  type SwDeps,
+  seedPage,
+  seedStatic,
+} from "../src/swStrategy";
 import { VERSION } from "../src/version";
 
 const ORIGIN = "https://drivecheck.example";
@@ -136,6 +145,25 @@ describe("service worker strategy", () => {
     const res = await handle(page("/"), world.deps());
     expect(await res.text()).toBe("<html>first visit</html>");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toBe(PAGE_CSP);
+  });
+
+  test("REQ-WEB-008 the first visit's own modules are saved, so the page works offline", async () => {
+    const world = new World();
+    world.network = async (request) => new Response(`module ${new URL(request.url).pathname}`);
+    await seedStatic(world.deps(), [
+      `${ORIGIN}/app/client/app.js`,
+      `${ORIGIN}/app/view.js`,
+      `${ORIGIN}/v1/map`,
+      "https://other.example/app/x.js",
+    ]);
+    expect(world.entries(`static-${VERSION}`).sort()).toEqual([
+      "/app/client/app.js",
+      "/app/view.js",
+    ]);
+    world.network = offline;
+    const res = await handle(get("/app/view.js"), world.deps());
+    expect(await res.text()).toBe("module /app/view.js");
   });
 
   test("REQ-WEB-008 a shared ?region= link does not replace the visitor's own saved page", async () => {
