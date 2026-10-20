@@ -1,4 +1,4 @@
-import type { CoordinatorDeps, Snapshot, StoredState } from "../src/coordinator";
+import type { CoordinatorDeps, MapState, Snapshot, StoredState } from "../src/coordinator";
 import type { Feed } from "../src/feed";
 import fixture from "./fixtures/aerialalerts.json";
 
@@ -24,6 +24,14 @@ export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
+export function imageResponse(bytes: number[], init: ResponseInit = {}): Response {
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: { "content-type": "image/png" },
+    ...init,
+  });
+}
+
 type Step = Response | Error | ((init: RequestInit) => Promise<Response>);
 
 /** A controllable world: clock, upstream, sleeping and the coordinator's one stored record. */
@@ -38,6 +46,8 @@ export class FakeWorld {
   capWaitMs: number[] = [];
   /** Attempts handed to the platform to keep alive after their caller returned. */
   backgrounded: Promise<void>[] = [];
+  mapStored: MapState | undefined;
+  mapSaves: MapState[] = [];
   failSaves = false;
   failNextLoad = false;
   /** Timeouts requested for upstream requests, with the controller that fires each one. */
@@ -88,6 +98,14 @@ export class FakeWorld {
           if (this.failSaves) throw new Error("storage unavailable");
           this.stored = structuredClone(state);
           this.saves.push(structuredClone(state));
+        },
+      },
+      mapStore: {
+        load: async () => this.mapStored,
+        save: async (state) => {
+          if (this.failSaves) throw new Error("storage unavailable");
+          this.mapStored = structuredClone(state);
+          this.mapSaves.push(structuredClone(state));
         },
       },
     };

@@ -20,6 +20,10 @@ One Durable Object is the only thing that talks to Ubilling. However many client
 locations ask, it makes at most one upstream request per 10 seconds, honours HTTP 429 and
 `Retry-After` for everyone, and keeps only the latest answer.
 
+Since [spec 002](../002-installable-web-app/spec.md) the Worker also serves the alert map
+(`GET /v1/map`, at most one more upstream request per minute, through the same coordinator),
+`GET /regions`, `POST /region` and `GET /offline`, and the page is an installable web app.
+
 Requirement text comes from the iOS app, `regional-check` `docs/requirements/`. Each shared
 requirement keeps its iOS ID, states its backend text, and says what differs and why.
 
@@ -28,7 +32,8 @@ requirement keeps its iOS ID, states its backend text, and says what differs and
 No alert history, accounts, ads or analytics, ever (core, "Never"). Not in this slice: the "Stay
 Alert" surrounded state (REQ-SURF-010), freshness tiers beyond one stale flag, the alert map image,
 client-side refresh, switching the apps to this API, and the deployment itself (the owner's
-Cloudflare account and sign-in).
+Cloudflare account and sign-in). Spec 002 brings the "Stay Alert" state, the alert map and
+client-side refresh into scope.
 
 ## User scenarios and testing
 
@@ -65,7 +70,8 @@ Acceptance scenarios:
 1. Given Kyiv city has `alertnow: true`, when the page renders in English, then it shows "Air Raid
    Alert", "Kyiv" and "Updated HH:mm" in Kyiv time from `cachedat`.
 2. Given Kyiv Oblast and Chernihiv Oblast are under alert and Kyiv city is quiet, when the page
-   renders for Kyiv city, then it shows "No Alert" and "Nearby: Kyiv Oblast, Chernihiv Oblast".
+   renders for Kyiv city, then it shows "Nearby: Kyiv Oblast, Chernihiv Oblast" (slice 1 showed
+   "No Alert"; since spec 002 the status is "Stay Alert", REQ-SURF-010).
 3. Given the browser asks for Ukrainian, when the page renders, then every visible string, the
    region names and `<html lang>` are Ukrainian.
 4. Given the snapshot is older than 2 minutes, when the page renders, then it keeps the last known
@@ -102,6 +108,9 @@ request, and replaces the per-device timer with a global floor: at most 0.1 requ
 all clients together, against Ubilling's 2 requests per second per host. Counted, not assumed: a
 fixture session counts upstream requests against client requests.
 
+Extended by spec 002 (REQ-WEB-012): the map request shares the single in-flight slot and the 429
+window, at most once per 60 s, 3 s after a status request and 1 s before the next one.
+
 ### REQ-PROVIDER-003 — Informational source
 
 Status: approved (iOS, 2026-09-17)
@@ -110,11 +119,14 @@ Given the page shows provider data\
 When it renders\
 Then it states that the data is informational, as the provider does
 
-Difference from iOS: the page has no Details tab; the note sits under the status.
+Difference from iOS: the page has no Details tab; the note sits under the status (since spec 002,
+in the footer below the map card, REQ-WEB-011).
 
 ### REQ-REFRESH-003 — One retry for transient errors
 
 Status: approved (iOS, 2026-09-17)
+
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md).
 
 Given an upstream fetch fails with a transient error (network failure or a 15 s timeout)\
 When the failure happens\
@@ -125,6 +137,8 @@ Difference from iOS: a Worker sees a thrown `fetch` or an abort, not `URLError`.
 ### REQ-REFRESH-005 — Rate limit backoff
 
 Status: approved (iOS, 2026-09-17, amended 2026-10-15)
+
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md).
 
 Given the provider returns HTTP 429\
 When the next upstream request would be due\
@@ -139,6 +153,9 @@ window is stored, so a restarted coordinator still honours it.
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md); the page's stale line
+now uses the iOS wording "Last known: {status} · HH:mm".
+
 Given a snapshot with `checkedAt` (server `cachedat`, else the backend's fetch time)\
 When `now − checkedAt` exceeds 2 × 60 s\
 Then the page keeps the last known alert phase and marks it as not current, and the API reports
@@ -149,6 +166,9 @@ Difference from iOS: the base interval is fixed at 60 s; the server has no power
 ### REQ-REFRESH-010 — Fetch floor and cache serving
 
 Status: approved (iOS, 2026-09-17)
+
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md), "Web client parts of
+requirements defined in slice 1".
 
 Given an upstream attempt started less than 10 s ago, whatever its outcome\
 When any client asks\
@@ -165,6 +185,8 @@ a server shared by many clients would otherwise send one request per client to a
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md).
+
 Given a provider response\
 When it contains unknown keys or lacks the shown region\
 Then the page ignores unknown keys and shows "Region Unavailable" for a missing region, distinct
@@ -177,13 +199,16 @@ ignore them; only the page applies the catalog.
 
 Status: approved (iOS, 2026-09-17)
 
+Extended to the web client by [spec 002](../002-installable-web-app/spec.md), which also shows at most
+two names and then "+N", as iOS does.
+
 Given neighbouring regions are under alert\
 When the page shows the current region, whether quiet or in alarm\
 Then the nearby-alerts line lists them, using the iOS neighbour table; with none, the line is absent
 
 ### REQ-API-001 — Versioned mirror endpoint
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
 
 Given a client asks `GET /v1/alerts`\
 When a snapshot is held\
@@ -197,7 +222,7 @@ fields let it judge staleness without trusting its own clock alone.
 
 ### REQ-API-002 — No snapshot, no fake status
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
 
 Given no snapshot is held\
 When the upstream fails, has not answered within 5 s, or a 429 window is open\
@@ -206,7 +231,7 @@ when a window is open, and the page shows "Unavailable" with HTTP 503
 
 ### REQ-API-003 — No history and no personal data
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
 
 Given the coordinator stores state\
 When it saves a snapshot or a rate-limit window\
@@ -217,7 +242,7 @@ Reason: core "Never" forbids alert history and analytics; a public proof must sh
 
 ### REQ-WEB-001 — Language
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
 
 Given a page request\
 When `?lang=` names `en`, `uk` or `ru`, or else `Accept-Language` prefers one of them\
@@ -226,7 +251,10 @@ other two languages
 
 ### REQ-WEB-002 — Current region
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
+
+Amended 2026-10-20 by spec 002: REQ-WEB-004 puts the visitor's region cookie between `?region=`
+and the network region, and supersedes the sentence about no region picker.
 
 Given a page request\
 When `?region=` names a catalog region id, or else Cloudflare's `request.cf.regionCode` for a
@@ -237,11 +265,16 @@ code), and the region code is neither stored nor logged
 Reason: the apps follow device location and fall back to Kyiv (REQ-REGION-009). A web page without
 a location prompt gets the nearest honest equivalent, the region of the visitor's network address,
 which Cloudflare resolves at the edge without anything being stored. `?region=` is for links and
-checks; the page offers no region picker, as the apps offer none since 2026-09-20.
+checks; the page offers no region picker, as the apps offer none since 2026-09-20 (superseded on
+the web by REQ-WEB-004, spec 002).
 
 ### REQ-WEB-003 — Accessible glanceable status
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18; see "Owner decisions")
+
+Amended 2026-10-20 by spec 002: REQ-WEB-005 lets the page load an external enhancing script; it
+still needs none, and no inline script runs. REQ-WEB-014 extends the contrast rule to card
+surfaces; the 4.5:1 floor still holds for every text colour.
 
 Given the page renders a status\
 When it is read by a screen reader or seen without colour\
@@ -268,6 +301,9 @@ upstream client.
 
 Cost: every API call reaches one Durable Object; at the free tier's 100,000 requests per day that
 is ample for a proof, and `Cache-Control: max-age=10` lets clients and proxies absorb repeats.
+Since spec 002 every page, map request and client poll reaches the object too: one always-open
+Status page is about 1,440 status and up to 1,440 map requests a day, so roughly 35 always-open
+pages reach the free limit.
 
 ### D2 — API shape: mirror plus freshness under `/v1`
 
@@ -284,6 +320,11 @@ no automatic trigger (REQ-PROVIDER-002). Colours come from `DriveCheckColors.swi
 `#0C0E11`, clear `#7CC39B`, alert `#F07C7C`, no-data `#C6CAD0`, text `#F2F3F5` and `#A3A7AE`.
 Strings and region names come from the Android resources, which follow the iOS String Catalogs.
 
+Superseded in part by spec 002: D5 adds a compiled client and a service worker; the page refreshes
+itself through `/v1/alerts` (REQ-REFRESH-001/002) and Refresh is a plain link only without
+JavaScript; REQ-WEB-011 brings the iOS layout, with caution `#E8BA62` and Unavailable `#9AA0A8`;
+the strings now follow the iOS String Catalogs directly.
+
 ### D4 — Tooling
 
 TypeScript 6.0.3 (TypeScript 7 is a new native compiler, too new for a proof), Vitest 5.0.3 for
@@ -293,7 +334,7 @@ owner's deploy, pinned in the lockfile. Every version was published before 2026-
 
 ## Owner decisions
 
-On 2026-10-18 the owner answered «а» (relayed by the orchestrator). The question offered A, the
+On 2026-10-18 the owner chose option A. The question offered A, the
 visitor's region from Cloudflare's IP region, else Kyiv city; or B, always Kyiv city. It also said
 the six slice 1 requirements count as approved together with the answer.
 
@@ -301,7 +342,8 @@ the six slice 1 requirements count as approved together with the answer.
   written.
 - O2, decided 2026-10-18 (A): REQ-WEB-002 uses the visitor's network region. The region is neither
   stored nor logged, and an unknown or non-Ukrainian region falls back to Kyiv city.
-- O3, done 2026-10-18: the owner approved the deploy in this session and signed in to Cloudflare
-  himself. Wrangler 4.147.0 deployed `main` at 468ae3c to https://drivecheck-api.vil4max.workers.dev
-  (version ee9dcce7). Smoke test: `/v1/alerts` answers 200 with 26 states and freshness, `/` renders
+- O3, done 2026-10-18: deployed with the owner's approval from the owner's Cloudflare account.
+  Wrangler 4.147.0 deployed `main` at 468ae3c to https://drivecheck-api.vil4max.workers.dev
+  (version ee9dcce7); the Worker later also answers at https://drivecheck.vil4max.com.
+  Smoke test: `/v1/alerts` answers 200 with 26 states and freshness, `/` renders
   in en, uk and ru, an unknown path answers 404, and three calls inside 10 s share one `fetchedAt`.

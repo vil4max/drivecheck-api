@@ -8,12 +8,17 @@ Feature: `001-cached-api-and-status-page` · Spec: [spec.md](spec.md) · Tasks: 
 - Runtime: Cloudflare Workers, one SQLite-backed Durable Object (spec D1).
 - Tests: Vitest 5.0.3 in Node 24. Logic modules import nothing from `cloudflare:*`, so they run in
   Node with fakes for `fetch`, the clock, sleeping and storage. Only `src/worker.ts` binds them to
-  the platform; CI checks it by type-checking and by a Wrangler dry-run bundle.
+  Cloudflare, and since spec 002 `src/client/app.ts` and `src/sw.ts` to the browser; CI checks them
+  by type-checking and by a Wrangler dry-run bundle.
 - Lint and format: Biome 2.5.15 (warnings fail; `noNonNullAssertion` is off because
   `noUncheckedIndexedAccess` makes `!` the explicit mark of a known index). Types:
   `@cloudflare/workers-types` 5.20261003.1. Bundle and deploy: Wrangler 4.147.0.
 
 ## Structure
+
+Slice 1 layout. [Spec 002's plan](../002-installable-web-app/plan.md), "Files and types", lists the
+files slice 2 adds and moves (the palette moved to `theme.ts`; `src/client/`, `src/sw.ts` and
+`public/` bind the browser).
 
 ```
 src/
@@ -45,6 +50,10 @@ window and the 429 streak (REQ-API-003). Two writes per attempt (the attempt tim
 request, the outcome after), so at most 17,280 rows per day, under the free plan's 100,000. A failed
 write is logged and does not fail callers; the in-memory state stays authoritative.
 
+Since spec 002 the object also answers `currentMap()` and keeps a second overwritten record, `map`
+(the latest image and its last attempt time, one write per map attempt: at most about 18,720 rows a
+day in all); `/offline` never reaches it.
+
 ## Requirement trace check
 
 `scripts/spec-trace.py` reads every `REQ-` heading in `specs/*/spec.md` and its `Status:` word. A
@@ -55,7 +64,9 @@ defined twice. Proposed requirements are cited too, but only approved ones are e
 
 ## Gate
 
-`npm run check` runs type-check, lint, tests with a JSON report, and the trace check. CI runs the
+`npm run check` runs type-check (three projects since spec 002), lint, tests with a JSON report,
+and the trace check; the dry-run bundle runs `npm run build` first through Wrangler's
+`build.command`. CI runs the
 same steps on every pull request and on `main`, plus the trace script's contract tests and a
 Wrangler dry-run bundle.
 

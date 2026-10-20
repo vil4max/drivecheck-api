@@ -1,5 +1,3 @@
-export const ENDPOINT = "https://ubilling.net.ua/aerialalerts/";
-
 export interface RegionState {
   alertnow: boolean;
   changed?: string;
@@ -9,6 +7,13 @@ export interface Feed {
   source: string;
   cachedat: string;
   states: Record<string, RegionState>;
+}
+
+/** One decoded answer with the times it was fetched and, when parseable, cached upstream. */
+export interface Snapshot {
+  feed: Feed;
+  fetchedAt: number;
+  serverCachedAt: number | null;
 }
 
 export class FeedError extends Error {}
@@ -73,4 +78,15 @@ export function kyivTimeToEpochMs(raw: string): number | null {
   const guess = wall - kyivOffsetMs(wall);
   // Re-check at the guessed instant so a time near a DST switch gets the offset in force then.
   return wall - kyivOffsetMs(guess);
+}
+
+/** A `/v1/alerts` body (REQ-API-001) back into a snapshot, for the browser client. */
+export function snapshotFromApi(body: unknown): Snapshot {
+  if (!isRecord(body) || body.apiVersion !== 1) throw new FeedError("not an apiVersion 1 body");
+  const feed = parseFeed(body);
+  const freshness = isRecord(body.freshness) ? body.freshness : {};
+  const fetchedAt =
+    typeof freshness.fetchedAt === "string" ? Date.parse(freshness.fetchedAt) : Number.NaN;
+  if (!Number.isFinite(fetchedAt)) throw new FeedError("freshness lacks fetchedAt");
+  return { feed, fetchedAt, serverCachedAt: kyivTimeToEpochMs(feed.cachedat) };
 }

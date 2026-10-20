@@ -1,0 +1,215 @@
+import type { Snapshot } from "./feed.ts";
+import type { Glyph } from "./glyphs.ts";
+import { STRINGS } from "./i18n.ts";
+import { type Lang, REGIONS, type Region } from "./regions.ts";
+import { checkedAt, isStale, STALE_AFTER_MS, statusView } from "./status.ts";
+
+/** The status colour, as iOS `StatusAccent`; theme.ts maps it to the palette. */
+export type Accent = "clear" | "alert" | "caution" | "stale" | "unavailable";
+
+/** Everything the Status page shows, computed once for the server render and the client patch. */
+export interface StatusModel {
+  lang: Lang;
+  /** The `?region=` the page was opened with, kept in its links (REQ-WEB-004); null otherwise. */
+  linkRegion: string | null;
+  regionId: string;
+  regionName: string;
+  title: string;
+  accent: Accent;
+  symbol: Glyph;
+  meta: string;
+  nearby: string | null;
+  mapCaption: string | null;
+  mapLabel: string;
+  /** The Worker held no map when the page rendered; the card then says so even without JS. */
+  mapMissing: boolean;
+  documentTitle: string;
+}
+
+export function kyivClock(epochMs: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Kyiv",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(epochMs);
+}
+
+/** iOS `NearbyAlertsLine`: at most two names, then "+N". */
+function nearbyNames(names: string[]): string {
+  const shown = names.slice(0, 2).join(", ");
+  return names.length > 2 ? `${shown} +${names.length - 2}` : shown;
+}
+
+function age(lang: Lang, ms: number): string {
+  const s = STRINGS[lang];
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  return minutes < 60 ? s.minutesAgo(minutes) : s.hoursAgo(Math.floor(minutes / 60));
+}
+
+export function statusModel(
+  snapshot: Snapshot | null,
+  region: Region,
+  lang: Lang,
+  now: number,
+  mapFetchedAt: number | null,
+  linkRegion: string | null = null,
+): StatusModel {
+  const s = STRINGS[lang];
+  const view = statusView(snapshot, region, now);
+  let accent: Accent;
+  let symbol: Glyph;
+  let title = s.phase[view.phase];
+  if (view.phase === "alarm") {
+    // A known alarm stays red even when old (iOS, REQ-REFRESH-006).
+    [accent, symbol] = ["alert", "exclamation"];
+  } else if (view.phase === "quiet" && view.stale) {
+    [accent, symbol] = ["stale", "clock"];
+  } else if (view.phase === "quiet" && view.surrounded) {
+    [accent, symbol, title] = ["caution", "triangle", s.stayAlert];
+  } else if (view.phase === "quiet") {
+    [accent, symbol] = ["clear", "check"];
+  } else {
+    [accent, symbol] = ["unavailable", "question"];
+  }
+
+  let meta: string;
+  if (view.phase === "unavailable" || view.phase === "regionUnavailable") {
+    meta = s.retry[view.phase];
+  } else {
+    const time = kyivClock(view.checkedAt!);
+    meta = view.stale ? s.lastKnown(title, time) : s.updated(time);
+  }
+
+  const showNearby = (view.phase === "alarm" || view.phase === "quiet") && view.nearby.length > 0;
+  const alerting = snapshot === null ? [] : REGIONS.filter((r) => inAlarm(snapshot, r));
+  let mapCaption: string | null = null;
+  let mapLabel = s.mapUnavailable;
+  if (snapshot !== null) {
+    mapCaption = s.mapCaption(alerting.length, REGIONS.length);
+    if (mapFetchedAt !== null) mapCaption += ` · ${age(lang, now - mapFetchedAt)}`;
+    mapLabel =
+      alerting.length > 0
+        ? s.mapAlarm(alerting.length, alerting.map((r) => r.names[lang]).join(", "))
+        : s.mapClear;
+  }
+
+  const regionName = region.names[lang];
+  return {
+    lang,
+    linkRegion,
+    regionId: region.id,
+    regionName,
+    title,
+    accent,
+    symbol,
+    meta,
+    nearby: showNearby ? s.nearby(nearbyNames(view.nearby.map((r) => r.names[lang]))) : null,
+    mapCaption,
+    mapLabel,
+    mapMissing: mapFetchedAt === null,
+    documentTitle: `${title} — ${regionName} · Drive Check`,
+  };
+}
+
+function inAlarm(snapshot: Snapshot, region: Region): boolean {
+  return snapshot.feed.states[region.apiKey]?.alertnow === true;
+}
+
+export interface RegionRow {
+  id: string;
+  name: string;
+  current: boolean;
+  /** `on` under alert, `off` quiet, `unknown` missing from the feed. */
+  state: "on" | "off" | "unknown";
+}
+
+export interface RegionsModel {
+  lang: Lang;
+  linkRegion: string | null;
+  regionId: string;
+  /** "Updated HH:mm", or "Last known · Updated HH:mm" once stale; null without data. */
+  meta: string | null;
+  current: { name: string; accent: Accent; pill: string | null };
+  alerting: RegionRow[];
+  others: RegionRow[];
+}
+
+/** iOS `RegionListView`: the current region first, then regions under alert, then the rest. */
+export function regionsModel(
+  snapshot: Snapshot | null,
+  region: Region,
+  lang: Lang,
+  linkRegion: string | null = null,
+  now: number | null = null,
+): RegionsModel {
+  const s = STRINGS[lang];
+  // The list is as old as its answer: it says when that was, and Last known once stale.
+  let meta: string | null = null;
+  let stale = false;
+  if (snapshot !== null && now !== null) {
+    const time = kyivClock(checkedAt(snapshot));
+    stale = isStale(snapshot, now);
+    meta = stale ? s.lastKnownAt(time) : s.updated(time);
+  }
+  const rows: RegionRow[] = REGIONS.map((r) => {
+    const state = snapshot?.feed.states[r.apiKey];
+    return {
+      id: r.id,
+      name: r.names[lang],
+      current: r.id === region.id,
+      state: state === undefined ? "unknown" : state.alertnow ? "on" : "off",
+    };
+  });
+  const own = rows.find((r) => r.current)!;
+  return {
+    lang,
+    linkRegion,
+    regionId: region.id,
+    meta,
+    current: {
+      name: own.name,
+      // As on Status: a known alarm stays red when old, a quiet status turns grey.
+      accent:
+        own.state === "on"
+          ? "alert"
+          : own.state === "off"
+            ? stale
+              ? "stale"
+              : "clear"
+            : "unavailable",
+      pill: own.state === "on" ? s.alertShort : own.state === "off" ? s.noAlertShort : null,
+    },
+    alerting: rows.filter((r) => r.state === "on"),
+    others: rows.filter((r) => r.state !== "on"),
+  };
+}
+
+/** An open page's map is behind when it is a minute older than the status it sits under. */
+export function mapBehind(mapFetchedAt: number | null, snapshot: Snapshot | null): boolean {
+  if (snapshot === null) return false;
+  return mapFetchedAt === null || snapshot.fetchedAt - mapFetchedAt >= 60_000;
+}
+
+/**
+ * The newer map an open page takes from the Worker's `x-map-fetched-at`, with the model drawn from
+ * the same snapshot and that map's time, so the image and its caption change together; null when
+ * the Worker's map is not newer than the one shown.
+ */
+export function swapMap(
+  snapshot: Snapshot | null,
+  region: Region,
+  lang: Lang,
+  now: number,
+  fetchedAtHeader: string | null,
+  shownAt: number | null,
+): { imageUrl: string; model: StatusModel } | null {
+  const at = Number(fetchedAtHeader ?? Number.NaN);
+  if (!Number.isFinite(at) || at <= (shownAt ?? Number.NEGATIVE_INFINITY)) return null;
+  return { imageUrl: `/v1/map?at=${at}`, model: statusModel(snapshot, region, lang, now, at) };
+}
+
+/** The first instant an answer reads as stale (REQ-REFRESH-006); null without one. */
+export function staleAt(snapshot: Snapshot | null): number | null {
+  return snapshot === null ? null : checkedAt(snapshot) + STALE_AFTER_MS + 1;
+}

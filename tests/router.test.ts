@@ -29,6 +29,7 @@ function call({
   return route({
     request: new Request(`https://drivecheck.example${path}`, { method, headers }),
     regionCode,
+    getMap: async () => null,
     getView: async () => {
       clock += viewDelayMs;
       return view ?? fallback;
@@ -109,7 +110,8 @@ describe("GET /", () => {
     expect(html).toMatch(/<h1[^>]*>Air Raid Alert<\/h1>/);
     expect(html).toContain("Kyiv");
     expect(html).toContain("Updated 12:00");
-    expect(html).not.toContain("<script");
+    // Spec 002 REQ-WEB-005: an external enhancing module is allowed, inline code is not.
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
   });
 
   test("REQ-WEB-003 escapes every HTML-significant character in rendered text", () => {
@@ -137,7 +139,8 @@ describe("GET /", () => {
         view: { snapshot: snapshotWith(["Київська область"]), rateLimitedUntil: null },
       })
     ).text();
-    expect(quiet).toMatch(/<h1[^>]*>No Alert<\/h1>/);
+    // Kyiv Oblast alone makes Kyiv city Stay Alert (REQ-SURF-010, spec 002).
+    expect(quiet).toMatch(/<h1[^>]*>Stay Alert<\/h1>/);
     expect(quiet).toContain("Nearby: Kyiv Oblast");
     const none = await (await call({ path: "/?lang=en" })).text();
     expect(none).not.toContain("Nearby");
@@ -152,7 +155,7 @@ describe("GET /", () => {
     const view = { snapshot: snapshotWith(["м. Київ"]), rateLimitedUntil: null };
     const html = await (await call({ path: "/?lang=en", view, now: T0 + 600_000 })).text();
     expect(html).toMatch(/<h1[^>]*>Air Raid Alert<\/h1>/);
-    expect(html).toContain("Last known · Updated 12:00");
+    expect(html).toContain("Last known: Air Raid Alert · 12:00");
   });
 
   test("REQ-API-002 the page shows Unavailable with 503 when there is no snapshot", async () => {
@@ -203,5 +206,155 @@ describe("GET /", () => {
       await call({ path: "/?lang=en&region=nowhere", regionCode: null })
     ).text();
     expect(fallback).toContain("Kyiv");
+  });
+});
+
+describe("region choice", () => {
+  const regionName = async (res: Response) =>
+    /<title>[^<]*— ([^<·]+) · Drive Check<\/title>/.exec(await res.text())?.[1]?.trim();
+
+  test("REQ-WEB-004 the region shown: ?region=, then the cookie, then the network, then Kyiv", async () => {
+    const lviv = { cookie: "theme=x; region=lviv" };
+    expect(await regionName(await call({ path: "/", headers: lviv, regionCode: "30" }))).toBe(
+      "Lviv Oblast",
+    );
+    expect(await regionName(await call({ path: "/?region=odesa", headers: lviv }))).toBe(
+      "Odesa Oblast",
+    );
+    const bad = { cookie: "region=../x" };
+    expect(await regionName(await call({ path: "/", headers: bad, regionCode: "46" }))).toBe(
+      "Lviv Oblast",
+    );
+    expect(await regionName(await call({ path: "/", headers: bad }))).toBe("Kyiv");
+  });
+
+  test("REQ-WEB-004 a ?region= link shows its region without remembering it", async () => {
+    const res = await call({ path: "/?region=odesa", headers: { cookie: "region=lviv" } });
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.headers.get("vary")).toContain("Cookie");
+  });
+
+  test("REQ-WEB-004 POST /region remembers a catalog region and returns to Status", async () => {
+    const post = (body: string) =>
+      route({
+        request: new Request("https://drivecheck.example/region", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body,
+        }),
+        regionCode: null,
+        getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+        getMap: async () => null,
+        clock: () => T0,
+      });
+    const ok = await post("region=lviv");
+    expect(ok.status).toBe(303);
+    expect(ok.headers.get("location")).toBe("/");
+    expect(ok.headers.get("set-cookie")).toBe(
+      "region=lviv; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
+    );
+    // The page the visitor came from keeps its language.
+    expect((await post("region=lviv&lang=uk")).headers.get("location")).toBe("/?lang=uk");
+    expect((await post("region=lviv&lang=xx")).headers.get("location")).toBe("/");
+    const unknown = await post("region=atlantis");
+    expect(unknown.status).toBe(400);
+    expect(unknown.headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("review repairs", () => {
+  const post = (headers: Record<string, string>) =>
+    route({
+      request: new Request("https://drivecheck.example/region", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
+        body: "region=lviv",
+      }),
+      regionCode: null,
+      getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+      getMap: async () => null,
+      clock: () => T0,
+    });
+
+  test("REQ-WEB-004 another site cannot choose the visitor's region", async () => {
+    for (const headers of [
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { "sec-fetch-site": "cross-site", origin: "null" },
+      { origin: "https://evil.example" },
+    ]) {
+      const res = await post(headers);
+      expect(res.status).toBe(403);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    // The site's own form, as browsers send it under referrer-policy: no-referrer.
+    const own = await post({ "sec-fetch-site": "same-origin", origin: "null" });
+    expect(own.status).toBe(303);
+    const older = await post({ origin: "https://drivecheck.example" });
+    expect(older.status).toBe(303);
+  });
+
+  test("REQ-WEB-006 the page allows its own origin only and cannot be framed", async () => {
+    const res = await call({ path: "/?lang=en" });
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    );
+    const regions = await call({ path: "/regions?lang=en" });
+    expect(regions.headers.get("content-security-policy")).toContain("connect-src 'self'");
+  });
+
+  test("REQ-WEB-004 a ?region= page keeps the region in its links", async () => {
+    const html = await (await call({ path: "/?region=kharkiv&lang=en" })).text();
+    expect(html).toContain('href="/?region=kharkiv&amp;lang=uk"');
+    const plain = await (await call({ path: "/?region=nowhere&lang=en" })).text();
+    expect(plain).not.toContain("region=nowhere");
+  });
+});
+
+describe("GET /offline", () => {
+  test("REQ-WEB-008 the offline page renders in the asked language without asking the coordinator", async () => {
+    let asked = false;
+    const res = await route({
+      request: new Request("https://drivecheck.example/offline?lang=uk"),
+      regionCode: null,
+      getView: async () => {
+        asked = true;
+        return { snapshot: null, rateLimitedUntil: null };
+      },
+      getMap: async () => null,
+      clock: () => T0,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<html lang="uk"');
+    expect(asked).toBe(false);
+  });
+});
+
+describe("no visitor data in logs", () => {
+  test("REQ-API-003 REQ-WEB-004 the region cookie is read for the response and never logged", async () => {
+    const lines: unknown[][] = [];
+    const methods = ["log", "info", "warn", "error", "debug"] as const;
+    const saved = methods.map((m) => console[m]);
+    for (const m of methods) console[m] = (...args: unknown[]) => lines.push(args);
+    try {
+      const res = await call({ path: "/?lang=en", headers: { cookie: "region=zakarpattia" } });
+      expect(await res.text()).toContain("Zakarpattia Oblast");
+      await route({
+        request: new Request("https://drivecheck.example/region", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "region=zakarpattia&lang=en",
+        }),
+        regionCode: "46",
+        getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+        getMap: async () => null,
+        clock: () => T0,
+      });
+    } finally {
+      methods.forEach((m, i) => {
+        console[m] = saved[i]!;
+      });
+    }
+    expect(JSON.stringify(lines)).not.toMatch(/zakarpattia|region=|46/);
   });
 });

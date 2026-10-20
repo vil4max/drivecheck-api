@@ -10,8 +10,10 @@
     "exactOptionalPropertyTypes": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "exclude": ["src/client/app.ts", "src/sw.ts"]
 }
