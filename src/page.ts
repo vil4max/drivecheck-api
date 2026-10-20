@@ -115,3 +115,27 @@ ${caption}
     ...(state === undefined ? {} : { data: JSON.stringify(state) }),
   });
 }
+
+/**
+ * The page the service worker shows offline when it has no saved page (REQ-WEB-008): the
+ * Unavailable status in the Status layout, in one language, with no map to load.
+ */
+export function renderOffline(lang: Lang): string {
+  const s = STRINGS[lang];
+  const title = s.phase.unavailable;
+  const main = `<section class="hero" id="hero">
+${heroGraphic("question")}
+<h1 id="status">${escapeHtml(title)}</h1>
+<p class="meta">${escapeHtml(s.offlineNote)}</p>
+</section>`;
+  const toolbar = `<a class="icon-btn end" href="${pageHref("/", lang, null)}" aria-label="${escapeHtml(s.refresh)}">${glyph("refresh")}</a>`;
+  return documentShell({
+    lang,
+    title: `${title} · Drive Check`,
+    accent: "unavailable",
+    path: "/",
+    linkRegion: null,
+    toolbar,
+    main,
+  });
+}

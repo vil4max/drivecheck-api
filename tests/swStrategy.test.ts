@@ -91,12 +91,20 @@ describe("service worker strategy", () => {
 
   test("REQ-WEB-008 offline with nothing saved, the offline page says Unavailable", async () => {
     const world = new World();
-    world.network = async () => new Response("static");
+    world.network = async (request) => {
+      const url = new URL(request.url);
+      return new Response(`offline ${url.searchParams.get("lang") ?? url.pathname}`);
+    };
     await install(world.deps());
+    expect(world.fetched.filter((p) => p === "/offline")).toHaveLength(3);
     world.network = offline;
-    const res = await handle(page("/"), world.deps());
-    expect(await res.text()).toBe("static");
-    expect(world.fetched).toContain("/offline.html");
+    // In the visitor's language: the page's ?lang=, else the browser's Accept-Language.
+    expect(await (await handle(page("/?lang=uk"), world.deps())).text()).toBe("offline uk");
+    const ru = new Request(`${ORIGIN}/`, {
+      headers: { accept: "text/html", "accept-language": "ru-RU,ru;q=0.9" },
+    });
+    expect(await (await handle(ru, world.deps())).text()).toBe("offline ru");
+    expect(await (await handle(page("/regions"), world.deps())).text()).toBe("offline en");
     const alerts = await handle(get("/v1/alerts"), world.deps());
     expect(alerts.status).toBe(503);
   });

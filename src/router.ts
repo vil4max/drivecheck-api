@@ -2,7 +2,7 @@ import { alertsResponse } from "./api.ts";
 import type { CoordinatorView, MapImage } from "./coordinator.ts";
 import { PAGE_CSP } from "./csp.ts";
 import { LANGS, negotiateLanguage } from "./i18n.ts";
-import { renderPage } from "./page.ts";
+import { renderOffline, renderPage } from "./page.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
 import { renderRegions } from "./regionsPage.ts";
@@ -93,21 +93,23 @@ export async function route({
 }: RouteInput): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/region" && request.method === "POST") return chooseRegion(request);
-  if (!["/", "/regions", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
+  if (!["/", "/regions", "/offline", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
+  const lang = negotiateLanguage(
+    url.searchParams.get("lang"),
+    request.headers.get("accept-language"),
+  );
+  // Fetched by the service worker on install; it needs no data, so it never wakes the coordinator.
+  if (url.pathname === "/offline") return htmlResponse(renderOffline(lang), 200);
   if (url.pathname === "/v1/map") return mapResponse(await getMap());
   const view = await getView();
   const now = clock();
   if (url.pathname === "/v1/alerts") return alertsResponse(view, now);
 
-  const lang = negotiateLanguage(
-    url.searchParams.get("lang"),
-    request.headers.get("accept-language"),
-  );
   const region = pickRegion(
     url.searchParams.get("region"),
     request.headers.get("cookie"),
@@ -122,8 +124,12 @@ export async function route({
           snapshot: view.snapshot,
           mapFetchedAt,
         });
+  return htmlResponse(html, view.snapshot === null ? 503 : 200);
+}
+
+function htmlResponse(html: string, status: number): Response {
   return new Response(html, {
-    status: view.snapshot === null ? 503 : 200,
+    status,
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "private, max-age=10",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { STRINGS } from "../src/i18n";
-import { renderPage } from "../src/page";
+import { renderOffline, renderPage } from "../src/page";
 import { type Lang, regionById } from "../src/regions";
 import { renderRegions } from "../src/regionsPage";
 import { ACCENT, contrastRatio, over, PALETTE, STYLESHEET, SURFACE } from "../src/theme";
@@ -236,5 +236,20 @@ describe("review repairs", () => {
     });
     expect(STYLESHEET).toContain(".accent-caution{--accent:#E8BA62");
     expect(STYLESHEET).toContain(".accent-alert{--accent:#F07C7C");
+  });
+});
+
+describe("offline page", () => {
+  test("REQ-WEB-008 the offline page is the Unavailable status in the iOS design, in one language", () => {
+    for (const lang of ["en", "uk", "ru"] as const) {
+      const page = renderOffline(lang);
+      expect(page).toContain(`<html lang="${lang}"`);
+      expect(page).toMatch(new RegExp(`<h1[^>]*>${STRINGS[lang].phase.unavailable}</h1>`));
+      expect(page).toContain(STRINGS[lang].offlineNote);
+      expect(page).toContain('data-glyph="question"');
+      expect(page).toMatch(/<body class="accent-unavailable"/);
+      expect(page).not.toContain("/v1/map");
+    }
+    expect(renderOffline("en")).toContain("No connection, and no saved status yet.");
   });
 });

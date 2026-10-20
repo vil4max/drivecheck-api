@@ -1,5 +1,6 @@
 import { OFFLINE_HEADER } from "./client/refresh.ts";
 import { PAGE_CSP } from "./csp.ts";
+import { negotiateLanguage } from "./i18n.ts";
 
 /** The part of the Cache API the strategy needs, keyed by path. */
 export interface CacheLike {
@@ -18,7 +19,9 @@ export interface SwDeps {
 
 /** Saved on install, so a first offline open still has its offline page and icons. */
 export const PRECACHE: readonly string[] = [
-  "/offline.html",
+  "/offline?lang=en",
+  "/offline?lang=uk",
+  "/offline?lang=ru",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/apple-touch-icon-180.png",
@@ -28,7 +31,7 @@ export const PRECACHE: readonly string[] = [
 const DATA_CACHE = "data";
 const LATEST: readonly string[] = ["/", "/regions", "/v1/alerts", "/v1/map"];
 const STATIC_PREFIXES = ["/app/", "/icons/"];
-const STATIC_FILES = ["/manifest.webmanifest", "/offline.html"];
+const STATIC_FILES = ["/manifest.webmanifest"];
 
 const staticCache = (version: string) => `static-${version}`;
 
@@ -106,7 +109,14 @@ async function networkFirst(request: Request, key: string, deps: SwDeps): Promis
     const saved = await cache.match(key);
     if (saved !== undefined) return markedOffline(saved);
     if (PAGES.includes(key)) {
-      const page = await (await deps.open(staticCache(deps.version))).match("/offline.html");
+      // The offline page in the visitor's language: the page's ?lang=, else Accept-Language.
+      const lang = negotiateLanguage(
+        new URL(request.url).searchParams.get("lang"),
+        request.headers.get("accept-language"),
+      );
+      const page = await (await deps.open(staticCache(deps.version))).match(
+        `/offline?lang=${lang}`,
+      );
       if (page !== undefined) return page;
     }
     return new Response("Offline", { status: 503, headers: { [OFFLINE_HEADER]: "1" } });

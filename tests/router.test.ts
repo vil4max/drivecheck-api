@@ -310,3 +310,22 @@ describe("review repairs", () => {
     expect(plain).not.toContain("region=nowhere");
   });
 });
+
+describe("GET /offline", () => {
+  test("REQ-WEB-008 the offline page renders in the asked language without asking the coordinator", async () => {
+    let asked = false;
+    const res = await route({
+      request: new Request("https://drivecheck.example/offline?lang=uk"),
+      regionCode: null,
+      getView: async () => {
+        asked = true;
+        return { snapshot: null, rateLimitedUntil: null };
+      },
+      getMap: async () => null,
+      clock: () => T0,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<html lang="uk"');
+    expect(asked).toBe(false);
+  });
+});

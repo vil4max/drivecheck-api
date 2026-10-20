@@ -34,6 +34,7 @@ export interface Strings {
   install: string;
   hintIos: string;
   hintMac: string;
+  offlineNote: string;
 }
 
 // Wording follows the apps' String Catalogs (regional-check `Localizable.xcstrings`); strings
@@ -77,6 +78,7 @@ export const STRINGS: Record<Lang, Strings> = {
     install: "Install app",
     hintIos: "To install: Share → Add to Home Screen",
     hintMac: "To install: File → Add to Dock",
+    offlineNote: "No connection, and no saved status yet.",
   },
   uk: {
     phase: {
@@ -117,6 +119,7 @@ export const STRINGS: Record<Lang, Strings> = {
     install: "Установити застосунок",
     hintIos: "Щоб установити: Поділитися → на початковий екран",
     hintMac: "Щоб установити: Файл → додати в Dock",
+    offlineNote: "Немає зʼєднання, а збереженого статусу ще немає.",
   },
   ru: {
     phase: {
@@ -157,6 +160,7 @@ export const STRINGS: Record<Lang, Strings> = {
     install: "Установить приложение",
     hintIos: "Чтобы установить: Поделиться → на экран «Домой»",
     hintMac: "Чтобы установить: Файл → добавить в Dock",
+    offlineNote: "Нет соединения, а сохранённого статуса пока нет.",
   },
 };
 
