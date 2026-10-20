@@ -143,8 +143,9 @@ same ID.
   30 s → 60 s → … up to 5 min. The client reuses the Worker's parser.
 - REQ-REFRESH-006 (stale): the client marks the shown status as not current when `now − checkedAt`
   exceeds 2 × 60 s, re-evaluated at that instant even when no request is due; a failed request or an
-  offline answer never replaces a known phase with "Unavailable"; a saved page the service worker
-  serves offline is drawn again for the current time, so it reads "Last known" without its script.
+  offline answer never replaces a known phase with "Unavailable"; a saved Status or Regions page the
+  service worker serves offline is drawn again for the current time, so it reads "Last known"
+  without its script.
 - REQ-REFRESH-010 (floor): the client sends no request within 10 s of its last successful answer,
   whatever triggered it (visibility, Refresh, the poll timer); inside the floor it re-renders the
   held data. The retry of REQ-REFRESH-003 is not floored.
@@ -219,11 +220,13 @@ When a page, `/v1/alerts` or `/v1/map` is requested\
 Then it tries the network first and keeps only the latest successful answer of each (one Status
 page, one Regions page, one alerts response, one map, overwritten); a page opened with `?region=`
 is never kept; offline it serves those, marked as offline so the client counts them as failures,
-with a saved Status page drawn again for the current time; with no saved page it serves the
+with a saved Status or Regions page drawn again for the current time;
+with no saved page it serves the
 Worker-rendered `/offline?lang=` page (the Unavailable status in the Status layout) in the page's
 `?lang=` or `Accept-Language` language; on install it saves that page for en, uk and ru, the
 manifest, the icons and every app module the build lists in `/app/assets.json`, in a cache named by
-the app version (`src/version.ts`, equal to `package.json`) that a new version replaces; the first,
+the app version (`src/version.ts`, equal to `package.json`) that a new version replaces, and a file
+that fails to save fails the install, keeping the previous version; the first,
 uncontrolled visit saves its own page and the app modules it loaded
 
 Reason: core "Never" forbids alert history; one overwritten entry is the same rule the coordinator
@@ -304,7 +307,9 @@ Status: approved (owner, 2026-10-20, with the plan)
 Given a visitor opens Regions from the map card or the address `/regions`\
 When it renders\
 Then it follows the iOS region list: the title "Regions" with a way back to Status, the current
-region in its own card with a location glyph and a status pill, the regions under alert grouped
+region in its own card with a location glyph and a status pill, the update time ("Updated HH:mm",
+or "Last known · Updated HH:mm" once stale, with a grey card for a quiet region),
+the regions under alert grouped
 first under "Alert Active · N" (shown only when there are any) and the rest under "Other regions",
 rows in catalog order, each a status dot and the name, the current row marked with the location
 glyph and alert rows labelled "Alert"; every row is a control that makes that region the visitor's

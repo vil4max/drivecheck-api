@@ -4,7 +4,7 @@ import { heroGraphic } from "../hero.ts";
 import { DEFAULT_REGION, type Lang, regionById } from "../regions.ts";
 import { type SwDeps, seedPage, seedStatic } from "../swStrategy.ts";
 import { VERSION } from "../version.ts";
-import { mapBehind, type StatusModel, statusModel } from "../view.ts";
+import { mapBehind, type StatusModel, statusModel, swapMap } from "../view.ts";
 import { installAffordance } from "./install.ts";
 import { RefreshLoop } from "./refresh.ts";
 
@@ -151,13 +151,15 @@ function setUpStatus(): void {
     checkingMap = true;
     fetch("/v1/map", { method: "HEAD" })
       .then((response) => {
-        const at = Number(response.headers.get("x-map-fetched-at"));
-        if (!response.ok || !Number.isFinite(at) || at <= (parsed.mapFetchedAt ?? 0)) return;
-        parsed.mapFetchedAt = at;
+        if (!response.ok) return;
+        const header = response.headers.get("x-map-fetched-at");
+        const swap = swapMap(snapshot, region, lang, Date.now(), header, parsed.mapFetchedAt);
+        if (swap === null) return;
+        parsed.mapFetchedAt = Number(header);
         const image = document.querySelector<HTMLElement>("#map .image");
-        if (image !== null) image.style.backgroundImage = `url(/v1/map?at=${at})`;
+        if (image !== null) image.style.backgroundImage = `url(${swap.imageUrl})`;
         byId("map")?.classList.remove("no-image", "is-failed");
-        patch(statusModel(snapshot, region, lang, Date.now(), at), last);
+        patch(swap.model, last);
       })
       .catch(() => {})
       .finally(() => {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { ENDPOINT, FeedCoordinator, MAP_ENDPOINT } from "../src/coordinator";
+import { regionById } from "../src/regions";
 import { route } from "../src/router";
-import { mapBehind } from "../src/view";
+import { mapBehind, swapMap } from "../src/view";
 import {
   FakeWorld,
   feedJson,
@@ -97,7 +98,7 @@ describe("alert map through the coordinator", () => {
     expect(world.sleeps.at(-1)).toBe(2_900); // 3 s after the JSON request, not dropped
     const fresh = await c.currentMap();
     expect(await bytesOf(fresh)).toEqual([2]);
-    // The page's caption ages from this map, so it agrees with the snapshot it counts.
+    // The Worker reports the new map's own fetch time, which the page's caption ages from.
     expect((await c.current()).mapFetchedAt).toBe(fresh?.fetchedAt);
   });
 
@@ -214,5 +215,46 @@ describe("map freshness on an open page", () => {
     expect(mapBehind(T0 - 59_999, snapshot)).toBe(false);
     expect(mapBehind(T0 - 60_000, snapshot)).toBe(true);
     expect(mapBehind(T0, null)).toBe(false);
+  });
+});
+
+describe("the open page swaps in a newer map", () => {
+  const kyiv = regionById("kyiv-city")!;
+  const snapshot = { ...snapshotWith(["Львівська область", "Сумська область"]), fetchedAt: T0 };
+
+  test("REQ-WEB-012 the image and the caption change together, from the same map and snapshot", () => {
+    const swap = swapMap(snapshot, kyiv, "en", T0 + 30_000, String(T0), T0 - 300_000);
+    expect(swap?.imageUrl).toBe(`/v1/map?at=${T0}`);
+    // Counted from this snapshot, aged from this map: 30 s rounds up to one minute.
+    expect(swap?.model.mapCaption).toBe("2 of 25 regions under alert · 1 min ago");
+  });
+
+  test("REQ-WEB-012 an older, equal or unreadable map time leaves the shown map in place", () => {
+    expect(swapMap(snapshot, kyiv, "en", T0, String(T0 - 1), T0)).toBeNull();
+    expect(swapMap(snapshot, kyiv, "en", T0, String(T0), T0)).toBeNull();
+    expect(swapMap(snapshot, kyiv, "en", T0, null, T0 - 300_000)).toBeNull();
+    expect(swapMap(snapshot, kyiv, "en", T0, "soon", null)).toBeNull();
+  });
+});
+
+describe("many pages at once", () => {
+  test("REQ-WEB-012 REQ-PROVIDER-002 many concurrent pages queue one map request at most", async () => {
+    const world = new FakeWorld();
+    const c = new FeedCoordinator(world.deps());
+    world.queue(jsonResponse(feedJson()), imageResponse([1]));
+    await c.current();
+    await c.idle();
+    world.now += 3_000;
+    await c.currentMap();
+    await c.idle();
+
+    world.now += 60_000;
+    world.queue(jsonResponse(feedJson()), imageResponse([2]));
+    await c.current(); // a JSON attempt is in flight
+    const maps = await Promise.all(Array.from({ length: 50 }, () => c.currentMap()));
+    expect(maps.every((m) => m?.bytes[0] === 1)).toBe(true);
+    await c.idle();
+    expect(world.requests.filter((u) => u === MAP_ENDPOINT)).toHaveLength(2);
+    expect(world.requests).toHaveLength(4);
   });
 });

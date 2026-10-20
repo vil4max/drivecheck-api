@@ -40,12 +40,17 @@ const staticCache = (version: string) => `static-${version}`;
 /** The build lists every compiled app module here, so a version precaches its whole client. */
 export const ASSET_LIST = "/app/assets.json";
 
+/**
+ * Saves the version's files; any one that fails fails the install, so the browser keeps the
+ * previous worker active rather than run a version with a module missing.
+ */
 export async function install(deps: SwDeps): Promise<void> {
   const cache = await deps.open(staticCache(deps.version));
   await Promise.all(
     [...PRECACHE, ...(await listedAssets(deps))].map(async (path) => {
       const response = await deps.fetch(new Request(`${deps.origin}${path}`));
-      if (response.ok) await cache.put(path, response);
+      if (!response.ok) throw new Error(`install: ${path} answered ${response.status}`);
+      await cache.put(path, response);
     }),
   );
 }

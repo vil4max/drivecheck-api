@@ -281,3 +281,17 @@ describe("every saved page shows its age offline", () => {
     expect(redrawn).toContain("Last known: No Alert · 12:00");
   });
 });
+
+describe("install is all or nothing", () => {
+  test("REQ-WEB-008 a listed module that fails to save fails the install, keeping the old version", async () => {
+    const world = new World();
+    world.network = async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/app/assets.json") {
+        return new Response(JSON.stringify(["/app/client/app.js", "/app/view.js"]));
+      }
+      return path === "/app/view.js" ? new Response("gone", { status: 404 }) : new Response("ok");
+    };
+    await expect(install(world.deps("0.2.1"))).rejects.toThrow("/app/view.js");
+  });
+});

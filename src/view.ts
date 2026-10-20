@@ -190,3 +190,21 @@ export function mapBehind(mapFetchedAt: number | null, snapshot: Snapshot | null
   if (snapshot === null) return false;
   return mapFetchedAt === null || snapshot.fetchedAt - mapFetchedAt >= 60_000;
 }
+
+/**
+ * The newer map an open page takes from the Worker's `x-map-fetched-at`, with the model drawn from
+ * the same snapshot and that map's time, so the image and its caption change together; null when
+ * the Worker's map is not newer than the one shown.
+ */
+export function swapMap(
+  snapshot: Snapshot | null,
+  region: Region,
+  lang: Lang,
+  now: number,
+  fetchedAtHeader: string | null,
+  shownAt: number | null,
+): { imageUrl: string; model: StatusModel } | null {
+  const at = Number(fetchedAtHeader ?? Number.NaN);
+  if (!Number.isFinite(at) || at <= (shownAt ?? Number.NEGATIVE_INFINITY)) return null;
+  return { imageUrl: `/v1/map?at=${at}`, model: statusModel(snapshot, region, lang, now, at) };
+}
