@@ -3,8 +3,8 @@
 The backend and web page for **Drive Check**, a glanceable air-raid alert check for drivers in
 Ukraine, with iOS and [Android](https://github.com/vil4max/drivecheck-android) apps.
 
-Live: <https://drivecheck-api.vil4max.workers.dev> (page) and
-<https://drivecheck-api.vil4max.workers.dev/v1/alerts> (API).
+Live: <https://drivecheck.vil4max.com> (web app) and
+<https://drivecheck.vil4max.com/v1/alerts> (API); the `workers.dev` address keeps working.
 
 One Cloudflare Worker fetches the public [Ubilling aerial-alerts
 feed](https://wiki.ubilling.net.ua/doku.php?id=aerialalertsapi) once for all clients and serves it

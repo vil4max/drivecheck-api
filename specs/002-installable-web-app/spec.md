@@ -251,9 +251,9 @@ body 17, subheadline 15 tabular, caption 12) are the iOS tokens, with the rounde
 glyphs are SVG drawings in the spirit of the SF Symbols the app uses (SF Symbols themselves may not
 ship on the web)
 
-Reason: the owner, 2026-10-20, after seeing the slice 1 page: «нужна карта и брать за референс иос
-дизайн - везде один вид»; and, relayed by the orchestrator, that the page must not stay poor-looking
-(«нельзя оставлять ужасным»). The slice 1 page shares only the palette.
+Reason: the owner's decision of 2026-10-20 (O5): the web needs the alert map and takes the iOS
+design as its reference, one look on every surface, at a quality the public page can stand on. The
+slice 1 page shares only the palette.
 
 ### REQ-WEB-012 — The alert map through the Worker
 
@@ -368,18 +368,16 @@ browser caches `/v1/map` for 60 s (`Cache-Control: public, max-age=60`).
 - O1, 2026-10-20: PD-107 and PD-108 option A, as relayed in this session's brief: an installable web
   app on the same Worker with region choice, auto-refresh and installation; the region stored only
   in the browser; the no-JS page stays the fallback; refresh only through `/v1/alerts`.
-- O2, 2026-10-20: the region choice is kept in a cookie («Cookie (Recommended)»).
-- O3, 2026-10-20: the client is compiled by `tsc`, no new dependency («tsc, no new dep»).
-- O4, 2026-10-20: browser-level checks are a recorded manual smoke («Manual smoke»).
-- O5, 2026-10-20: after parking, the owner resumed slice 2 in this session («Сделать сейчас») with
-  the iOS design as the reference and the alert map; relayed by the orchestrator the same day,
-  visual quality, responsive layout, accessibility, a measured first paint and screenshots in the
-  PR are acceptance criteria.
-- O6, 2026-10-20: dark theme only, as the apps («Только тёмная»); this overrides the
-  orchestrator's request for a light theme.
-- O7, 2026-10-20: the yellow "Stay Alert" status is in scope, as in iOS («Да, как в iOS»).
-- O8, 2026-10-20: Status and Regions in this slice; Details later; no Pro crown
-  («Status + Regions»).
+- O2, 2026-10-20: the region choice is kept in a cookie.
+- O3, 2026-10-20: the client is compiled by `tsc`, no new dependency.
+- O4, 2026-10-20: browser-level checks are a recorded manual smoke.
+- O5, 2026-10-20: after parking, the owner resumed slice 2 with the iOS design as the reference
+  and the alert map; relayed by the orchestrator the same day, visual quality, responsive layout,
+  accessibility, a measured first paint and screenshots in the PR are acceptance criteria.
+- O6, 2026-10-20: dark theme only, as the apps; this overrides the orchestrator's request for a
+  light theme.
+- O7, 2026-10-20: the yellow "Stay Alert" status is in scope, as in iOS.
+- O8, 2026-10-20: Status and Regions in this slice; Details later; no Pro crown.
 - O9, open: refinements written during implementation, after the plan approval, from evidence in
   the browser and the independent review. They wait for the owner's confirmation in the PR:
   1. REQ-WEB-012: a map request waits 3 s after a JSON request and a JSON request keeps 1 s clear
