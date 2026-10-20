@@ -1,7 +1,7 @@
 # Implementation plan: installable web app in the iOS design (slice 2, revised)
 
 
-Base: 27a8781d86ac8168c27c9fae711fdca331a9aa67
+Base: 58afa34b5c2398adf677d4c950bfb0042ae1d244 (the spec revision commit, after the local history scrub of 2026-10-20)
 Feature: `002-installable-web-app` · Spec: `specs/002-installable-web-app/spec.md` (revised
 2026-10-20; approving this plan approves its `proposed` requirements). Branch
 `feat/002-installable-web-app`.
