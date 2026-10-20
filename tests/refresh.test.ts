@@ -119,6 +119,23 @@ describe("RefreshLoop", () => {
     expect(world.requestTimes).toEqual([T0 + 54_000, T0 + 654_000]);
   });
 
+  test("REQ-REFRESH-001 a page that opened with stale or no data asks as soon as the floor allows", async () => {
+    const world = new World();
+    world.now = T0 + 300_000; // the page's answer was checked 5 min ago
+    started(world);
+    world.answers.push(world.ok());
+    await world.advance(9_999);
+    expect(world.paths).toEqual([]);
+    await world.advance(1);
+    expect(world.requestTimes).toEqual([T0 + 310_000]);
+
+    const empty = new World();
+    started(empty, true, null);
+    empty.answers.push(empty.ok());
+    await empty.advance(10_000);
+    expect(empty.requestTimes).toEqual([T0 + 10_000]);
+  });
+
   test("REQ-REFRESH-002 60 s ± 10 % when quiet, 30 s in alarm, 300 s with data saver", async () => {
     const world = new World();
     world.random = 1;

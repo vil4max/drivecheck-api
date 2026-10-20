@@ -60,6 +60,20 @@ export class RefreshLoop {
   start(visible: boolean): void {
     this.visible = visible;
     this.armStale();
+    const now = this.deps.now();
+    const old = this.snapshot === null || now - checkedAt(this.snapshot) > STALE_AFTER_MS;
+    if (visible && old) {
+      // After an idle spell the Worker serves its old answer and refreshes in the background;
+      // like the first fetch of an iOS session, ask again as soon as the floor allows.
+      this.pollTimer = this.deps.setTimer(
+        () => {
+          this.pollTimer = null;
+          void this.trigger();
+        },
+        FLOOR_MS - (now - this.lastSuccessAt),
+      );
+      return;
+    }
     this.schedulePoll();
   }
 

@@ -104,7 +104,10 @@ while the page is hidden
 
 Difference from iOS: the active surface is a visible document (`document.visibilityState`), not
 the Status tab or CarPlay. The first answer comes with the page itself, so opening the page does
-not add a request; becoming visible again does.
+not add a request, unless that answer is already stale or missing (the Worker serves its held
+answer after an idle spell and refreshes in the background): then the client asks as soon as the
+10 s floor allows, as the immediate first fetch of an iOS session. Becoming visible again asks at
+once.
 
 ### REQ-REFRESH-002 — Adaptive shared polling interval
 
