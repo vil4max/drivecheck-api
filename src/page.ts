@@ -1,3 +1,4 @@
+import type { Snapshot } from "./feed.ts";
 import { glyph } from "./glyphs.ts";
 import { heroGraphic } from "./hero.ts";
 import { LANGS, STRINGS } from "./i18n.ts";
@@ -29,6 +30,8 @@ export function documentShell(opts: {
   path: string;
   toolbar: string;
   main: string;
+  /** Data the enhancing script starts from, so opening the page adds no request. */
+  data?: string;
 }): string {
   const s = STRINGS[opts.lang];
   const languages = LANGS.filter((l) => l !== opts.lang)
@@ -54,7 +57,7 @@ export function documentShell(opts: {
 <body class="accent-${opts.accent}">
 <div class="shell">
 <header class="toolbar">${opts.toolbar}<p class="title">Drive Check</p></header>
-<main id="main">
+<main id="main"${opts.data === undefined ? "" : ` data-state="${escapeHtml(opts.data)}"`}>
 ${opts.main}
 </main>
 <footer class="footer">
@@ -71,7 +74,10 @@ ${opts.main}
 }
 
 /** The Status page in the iOS layout (REQ-WEB-011); complete without its script (REQ-WEB-005). */
-export function renderPage(model: StatusModel): string {
+export function renderPage(
+  model: StatusModel,
+  state?: { snapshot: Snapshot | null; mapFetchedAt: number | null },
+): string {
   const s = STRINGS[model.lang];
   const nearby =
     model.nearby === null
@@ -102,5 +108,6 @@ ${caption}
     path: "/",
     toolbar,
     main,
+    ...(state === undefined ? {} : { data: JSON.stringify(state) }),
   });
 }

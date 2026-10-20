@@ -155,8 +155,8 @@ browser evidence below, not by Vitest.
 - [x] T014 Implement `public/**`, `src/swStrategy.ts`, `src/sw.ts`.
 
 ## Group 8: install affordance and client wiring
-- [ ] T015 Test: `install.test.ts` proves REQ-WEB-009.
-- [ ] T016 Implement `src/client/install.ts`, `src/client/app.ts` (patches Status from `view.ts`,
+- [x] T015 Test: `install.test.ts` proves REQ-WEB-009.
+- [x] T016 Implement `src/client/install.ts`, `src/client/app.ts` (patches Status from `view.ts`,
   SW registration, install button, Refresh without reload).
 
 ## Group 9: evidence, docs, review, PR

@@ -95,10 +95,14 @@ export async function route({
     request.headers.get("cookie"),
     regionCode,
   );
+  const mapFetchedAt = view.mapFetchedAt ?? null;
   const html =
     url.pathname === "/regions"
       ? renderRegions(regionsModel(view.snapshot, region, lang))
-      : renderPage(statusModel(view.snapshot, region, lang, now, view.mapFetchedAt ?? null));
+      : renderPage(statusModel(view.snapshot, region, lang, now, mapFetchedAt), {
+          snapshot: view.snapshot,
+          mapFetchedAt,
+        });
   return new Response(html, {
     status: view.snapshot === null ? 503 : 200,
     headers: {
