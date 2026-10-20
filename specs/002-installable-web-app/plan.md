@@ -1,175 +1,178 @@
-# Implementation plan: installable web app (slice 2)
+# Implementation plan: installable web app in the iOS design (slice 2, revised)
 
-Status: parked on 2026-10-20, no code. Base when resumed: the then-current `main`.
-
-Feature: `002-installable-web-app` · Spec: `specs/002-installable-web-app/spec.md` (written this
-session; new REQs `proposed`, approving this plan approves them and flips them to `approved`).
+Feature: `002-installable-web-app` · Spec: `specs/002-installable-web-app/spec.md` (revised
+2026-10-20; approving this plan approves its `proposed` requirements). Branch
+`feat/002-installable-web-app`.
 
 ## Context
 
-PD-108 option A: the slice 1 status page becomes an installable PWA on the same Worker, with region
-choice (cookie, O2), auto-refresh only through `/v1/alerts` under the iOS refresh policy and the
-Worker's 10 s floor, a manifest, a service worker with offline last-known status, and an install
-affordance. The no-JS page stays complete. Owner answers of 2026-10-20: cookie (O2), `tsc` client
-build with no new dependency (O3), manual browser smoke instead of Playwright (O4).
+Slice 1 is a correct but sketch-like page. The owner resumed slice 2 (O5) and asked that the web
+follow the iOS Status tab, with the alert map, "one look everywhere"; the page is the project's
+public showcase, so visual quality, responsiveness, accessibility and a measured first paint are
+acceptance criteria. Decided on 2026-10-20: cookie for the region (O2), `tsc` client build without
+new dependencies (O3), manual browser smoke (O4), dark only (O6), "Stay Alert" in scope (O7),
+Status + Regions pages, no Details, no crown (O8). Kept from the first plan: PWA (manifest, service
+worker, offline, install affordance) and auto-refresh only through `/v1/alerts`.
+
+Reference: the shipping iOS screen (`regional-check/.artifacts/iphone-duo-toolbars/13-iphone17-*`)
+and its tokens (`Theme+Redesign.swift`, `DriveCheckColors.swift`, `StatusHeroGraphic.swift`,
+`MapCardView.swift`, `RegionListView.swift`); the 2026-09-17 mockups are older and not the reference.
 
 ## Baseline
 
-Commit `33e8069` (main). `npm run check` on the untouched tree: green — typecheck, Biome, Vitest,
-trace "15 requirements, 15 approved, all approved cited". Log: `build/verify/baseline.log`.
+`main` at `33e8069`: `npm run check` green, trace "15 requirements, 15 approved, all approved
+cited". Branch commits so far are docs only (`2ecc408`, `e143731`, plus the spec revision).
 
 ## Approach
 
-Keep the server the source of truth and share its pure modules with the browser. Split `page.ts`
-into a pure `pageModel(view, lang)` (texts, phase, colour, nearby, meta) and the HTML renderer, so
-server and client render the same wording. The client is a few small ES modules compiled by a second
-`tsconfig` (DOM lib) to `public/app/`, the service worker by a third (WebWorker lib); Workers Static
-Assets serve `public/`, Wrangler's `build.command` runs the build before `deploy`, `dev` and the
-CI dry-run. All policy lives in DOM-free modules with injected clock, `fetch`, timers and caches,
-so Vitest tests it in Node; `app.ts` and `sw.ts` are thin wiring, covered by type-check and the
-manual smoke.
+The server stays the source of truth and renders complete HTML for both pages; the browser only
+enhances. Pure modules shared by Worker and client: `regions`, `status` (now with the caution
+phase), `i18n`, `feed`, `retryAfter`, and a new `view.ts` that turns a status view into the page
+model (title, accent, glyph, meta, nearby text, map caption and label). Two renderers use that model:
+`page.ts` (Status) and `regionsPage.ts` (Regions), sharing one stylesheet built from the iOS tokens
+(`theme.ts`). The coordinator gains the map request behind the same single upstream slot and 429
+window. The client (`tsc` → `public/app/`) runs the refresh loop and patches the Status DOM from the
+same model; the service worker gives offline. Everything with logic is DOM-free and tested in
+Vitest; `app.ts` and `sw.ts` are thin bindings, checked by type-check and the browser smoke.
 
 ## Files and types
 
 Changed:
-- `src/feed.ts` — gains `Snapshot` (moved from `coordinator.ts`, re-exported there) and a
-  `snapshotFromApi(body)` parser for the `/v1/alerts` mirror (rejects `apiVersion ≠ 1`).
-- `src/coordinator.ts` — owns `ENDPOINT` (moved from `feed.ts`), so no Ubilling URL is in the
-  client graph.
-- Relative imports in the shared modules (`regions`, `i18n`, `status`, `feed`, `retryAfter`,
-  `page`) take a `.ts` extension; main `tsconfig.json` adds `allowImportingTsExtensions` and
-  excludes `src/client/app.ts` and `src/sw.ts`.
-- `src/page.ts` — `pageModel()`; `renderPage` adds the region picker form (`POST /region`), install
-  slot, manifest/icon/theme-color links, `<script type="module" src="/app/client/app.js">`, ids on
-  live nodes, `aria-live="polite"` on the status, relative font sizes (`rem`, `-apple-system-body`
-  under `@supports`), focus rings on every control.
-- `src/i18n.ts` — strings: region label, choose, install button, Safari hints, offline line.
-- `src/router.ts` — region order `?region=` › cookie › network › Kyiv (`regionCookie.ts`);
-  `POST /region` sets the cookie and 303s to `/` (unknown id → 400, no cookie); new CSP
-  (`script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; img-src 'self';
-  form-action 'self'`); `vary: Accept-Language, Cookie`.
-- `wrangler.jsonc` — `assets: { directory: "./public", html_handling: "none" }`,
-  `build: { command: "npm run build" }`.
-- `package.json` — `build` (both client `tsc -p`), `typecheck` runs all three projects.
-- `.gitignore` — `build/`, `public/app/`. README — PWA section.
-- `specs/001-.../spec.md` — one pointer line under REQ-REFRESH-003/005/006/010, REQ-REGION-001,
-  REQ-SURF-005 and REQ-WEB-002 to the client parts in 002 (single definition kept in 001).
+- `src/status.ts` — `Phase` gains `caution`; `isSurrounded()` per REQ-SURF-010 (Kyiv city rule,
+  half of neighbours, more than half of the country); stale never caution.
+- `src/coordinator.ts` — owns `ENDPOINT` and `MAP_ENDPOINT` (`?map=nightmode`); `currentMap()`:
+  one upstream slot shared with the JSON attempt, 60 s map floor, shared 429 window, one stored
+  image `{bytes, contentType, fetchedAt, lastAttemptAt}` in a `MapStore`; `CoordinatorView` gains
+  `mapFetchedAt`. `Snapshot` moves to `feed.ts` (re-exported).
+- `src/worker.ts` — `currentMap()` RPC; map stored under its own key (memory-only fallback on a
+  storage error).
+- `src/router.ts` — `GET /v1/map` (image, `max-age=60`, 503 without one), `GET /regions`,
+  `POST /region` (cookie + 303 to `/`), region order `?region=` › cookie › network › Kyiv, CSP
+  (`script-src 'self'; connect-src 'self'; img-src 'self'; worker-src 'self'; manifest-src 'self';
+  form-action 'self'`), `vary: Accept-Language, Cookie`.
+- `src/page.ts` — Status renderer in the iOS layout; the existing palette and contrast helpers move
+  to `theme.ts`.
+- `src/i18n.ts` — strings from the iOS String Catalog (keys in the spec's brief): Stay Alert,
+  "Last known: %@ · %@", nearby "+N", map caption, minutes/hours ago, map labels, map error,
+  Regions title, Current region, Alert Active · N, Other regions, install button, Safari hints.
+- `src/api.ts` unchanged except imports; `wrangler.jsonc` (assets, build), `package.json` (build,
+  three typechecks, version 0.2.0), `.gitignore` (`build/`, `public/app/`), README.
 
 New:
-- `src/regionCookie.ts` — `parseRegionCookie(header)`, `regionCookie(id)` (shared by router and
-  client).
-- `src/client/refresh.ts` — `RefreshLoop`: visibility, interval 60/30/300 s ±10 % jitter, 10 s
-  floor from last success, one 2 s retry after a throw or 15 s timeout, `Retry-After` / backoff via
-  `rateLimitDeadline` from `retryAfter.ts`, stale timer at `checkedAt + 120 s`, offline-marked
-  answers count as failures. Injected `{now, setTimer, clearTimer, fetchAlerts, random,
-  saveData, onSnapshot}`.
-- `src/client/install.ts` — `installAffordance({standalone, promptAvailable, userAgent})` →
-  `"button" | "safari-ios" | "safari-mac" | "none"`.
-- `src/client/app.ts` — DOM wiring: apply `pageModel` to the nodes, picker (sets cookie, re-renders
-  from held snapshot, no request), Refresh click → loop, `beforeinstallprompt`, SW registration.
-- `src/sw.ts` + `src/swStrategy.ts` — strategy is pure (`handle(request, {fetch, cache, version})`):
-  network-first for navigations and `/v1/alerts` keeping one entry each, offline header
-  `x-drivecheck-offline: 1`, `offline.html` fallback, cache-first for versioned static files, old
-  caches deleted on activate; `sw.ts` binds it to `self`.
-- `public/manifest.webmanifest`, `public/icons/{icon-192,icon-512,apple-touch-icon-180}.png` (from
-  the iOS `AppIcon.png` via `sips`), `public/offline.html` (en/uk/ru "Unavailable", palette, no
-  JS), `public/_headers` (`/app/sw.js`: `Service-Worker-Allowed: /`, `Cache-Control: no-cache`).
-- `tsconfig.client.json`, `tsconfig.sw.json` (emit to `public/app/`, `rewriteRelativeImportExtensions`).
-- `tests/refresh.test.ts`, `tests/swStrategy.test.ts`, `tests/manifest.test.ts`,
-  `tests/install.test.ts`, `tests/page.test.ts` (or extend `router.test.ts`), `tests/clientGraph.test.ts`.
+- `src/theme.ts` — iOS tokens (colours, surfaces, radii, spacing, type scale in rem) and the CSS.
+- `src/glyphs.ts` — inline SVG glyphs: checkmark, exclamation, warning triangle, clock, question,
+  location arrow, refresh, chevron.
+- `src/hero.ts` — hero SVG: 60 ticks on r 74, disc 108, glow, sweep (CSS rotation 4 s, static 45°
+  under `prefers-reduced-motion`).
+- `src/view.ts` — `statusModel(view, lang, now, map)` and `regionsModel(snapshot, region, lang)`.
+- `src/regionsPage.ts`, `src/regionCookie.ts`.
+- `src/client/refresh.ts` (RefreshLoop as in the first plan), `src/client/install.ts`,
+  `src/client/app.ts`, `src/swStrategy.ts`, `src/sw.ts`.
+- `public/manifest.webmanifest`, `public/icons/*` (from the iOS AppIcon via `sips`),
+  `public/offline.html`, `public/_headers`; `tsconfig.client.json`, `tsconfig.sw.json`.
+- `docs/screenshots/` — phone (375 px) and desktop (1440 px) Status and Regions, alarm and quiet,
+  referenced from the PR.
+
+Existing tests whose expectations change because the spec changes them (named in the report):
+`tests/router.test.ts` stale wording ("Last known: … · HH:mm" replaces "Last known · Updated") and
+the nearby line (two names then "+N"); `tests/status.test.ts` if it asserts the old phases.
 
 ## Tests
 
 | REQ | Test | Discriminating cases |
 |---|---|---|
-| REQ-REFRESH-001 | `refresh.test.ts` "fetches only while visible" | hidden for 10 min → 0 requests; visible again 11 s after last success → 1 request at once; page open → no request until the first interval |
-| REQ-REFRESH-002 | "interval by phase, data saver and jitter" | quiet + random 0/1 → 54 s/66 s; alarm → 27–33 s; saveData + alarm → 300 s ±10 %; phase flips after an answer → next delay follows the new phase |
-| REQ-REFRESH-003 | "one retry after 2 s" | throw → retry at +2 s → success; second throw → no third request; 15 s abort counts as throw; HTTP 500 → no retry |
-| REQ-REFRESH-005 | "Retry-After and backoff hold every trigger" | 503 `Retry-After: 45` → no request at +30 s (poll due) nor on Refresh, request after +45 s; no header → 30 s then 60 s; `Retry-After: 99999` → capped 5 min |
-| REQ-REFRESH-006 | "stale at checkedAt + 120 s without a request"; page model test | stale flag flips at exactly +120 001 ms with no fetch; failure after a held alarm keeps "Air Raid Alert" (never "Unavailable"); offline-marked answer → failure, held phase kept |
-| REQ-REFRESH-010 | "floor 10 s from last success" | Refresh at +5 s → 0 requests, re-render; at +10 001 ms → 1; retry at +2 s after a failure is sent despite the floor |
-| REQ-REGION-001, REQ-SURF-005 | client model test from an API body | region key missing → "Region Unavailable"; Kyiv Oblast + Chernihiv in alarm, Kyiv city quiet → "No Alert" + "Nearby: Kyiv Oblast, Chernihiv Oblast" |
-| REQ-WEB-004 | `router.test.ts` | cookie `region=lviv` + network `30` → Lviv; `?region=odesa` + cookie lviv → Odesa and no `set-cookie`; cookie `region=../x` → network region; `POST /region` `region=lviv` → 303 `/` with `Set-Cookie: region=lviv; Path=/; Max-Age=31536000; SameSite=Lax; Secure`; unknown id → 400 without cookie |
-| REQ-WEB-005 | `page.test.ts` | rendered page contains picker form with all 25 regions and the current one `selected`, refresh link, nearby text — all present with the script removed; `pageModel` strings equal `renderPage` strings for en/uk/ru; exactly one `h1` |
-| REQ-WEB-006 | `refresh.test.ts` + `clientGraph.test.ts` + router CSP | every client request URL is `/v1/alerts`; no file in the client import graph contains `ubilling.net.ua` or an `http(s)://` origin; CSP has `connect-src 'self'` and no `*` |
-| REQ-WEB-007 | `manifest.test.ts` | fields as spec; icon files exist and PNG IHDR width/height = 192, 512, 180; page links manifest and apple-touch-icon |
-| REQ-WEB-008 | `swStrategy.test.ts` (fake cache + fetch) | online `/` → network answer, cache holds exactly 1 page entry after two loads; offline `/` → cached page with offline header; offline, nothing cached → `offline.html`; `/v1/alerts` 503 → not cached, previous kept; POST `/region` → passthrough, never cached; activate deletes `static-v1` when version is v2 |
-| REQ-WEB-009 | `install.test.ts` | prompt available → button; standalone → none even with prompt; iPhone Safari UA → safari-ios; macOS Safari → safari-mac; Chrome on iOS (CriOS) / Edge without prompt → none |
-| REQ-WEB-010 | `page.test.ts` + existing contrast test | no `px` font sizes in CSS; `@supports (font:-apple-system-body)` present; every interactive element has `:focus-visible`; `aria-live="polite"` only on the status node, not on the time line; new colours ≥ 4.5:1 on `#0C0E11` |
+| REQ-SURF-010 | `status.test.ts` | Kyiv city quiet + Kyiv Oblast alarm → caution; Kyiv Oblast quiet + Kyiv city alarm → not caution; Volyn (2 neighbours) with Rivne alarm → caution (1×2 ≥ 2); Dnipropetrovsk (7) with 3 → quiet, with 4 → caution; 13 of 25 alarm, own neighbour 1 → caution, 12 → quiet unless half; stale → never caution; region itself alarm → alarm |
+| REQ-WEB-011 | `page.test.ts` | per phase: title, accent hex and glyph id (alarm red !, quiet green ✓, caution yellow ▲, stale grey clock, stale alarm stays red); meta "Updated 14:09" vs "Last known: No Alert · 14:09"; nearby "Nearby: A, B +3"; hero has 60 ticks; reduced-motion rule present; only one `h1` |
+| REQ-WEB-012 | `coordinator.test.ts`, `router.test.ts`, `page.test.ts` | first `/v1/map` → one upstream map request with `?map=nightmode`; second within 60 s → 0; at +60 001 ms → 1; JSON attempt in flight → map request waits/doesn't start (never two at once); map 429 `Retry-After: 30` → JSON request also held 30 s; failure → old image kept and served; no image → 503; caption "4 of 25 regions under alert · 2 min ago" from map time not status time; label lists the alarm regions |
+| REQ-WEB-013 | `regionsPage.test.ts` | 3 alarms → "Alert Active · 3" group first, 22 others; no alarms → no alert group; current region card with pill; every row is a `POST /region` button with its id |
+| REQ-WEB-004 | `router.test.ts` | cookie lviv + network 30 → Lviv; `?region=odesa` + cookie → Odesa, no `set-cookie`; bad cookie → network; `POST /region` lviv → 303 `/` + `Set-Cookie: region=lviv; Path=/; Max-Age=31536000; SameSite=Lax; Secure`; unknown → 400, no cookie; log never receives the cookie |
+| REQ-WEB-005 | `page.test.ts` | page without its script still has status, time, nearby, map img, Regions link, refresh link; `statusModel` text equals rendered text in en/uk/ru |
+| REQ-WEB-006 | `clientGraph.test.ts`, refresh test, router CSP | no `ubilling.net.ua` or external origin in the client graph; every loop request is `/v1/alerts`; CSP has no external source |
+| REQ-WEB-010, REQ-WEB-014 | `page.test.ts`, `theme.test.ts` | no `px` font sizes; `-apple-system-body` under `@supports`; `:focus-visible` on every control; `aria-live` only on the status; every text/background pair in the token table ≥ 4.5 (3 for ≥ 24 px text); container `max-width` and no fixed widths over 320 px |
+| REQ-REFRESH-001/002/003/005/006/010 | `refresh.test.ts` | as in the first plan: hidden → 0 requests; 54/66 s quiet, 27–33 s alarm, 300 s data saver; retry once at +2 s; 503 `Retry-After: 45` holds polls and Refresh; stale flips at +120 001 ms without a request; floor 10 s from last success, retry not floored |
+| REQ-REGION-001, REQ-SURF-005 | `page.test.ts` from an API body | missing key → "Region Unavailable"; neighbours in alarm → nearby card, none → no card |
+| REQ-WEB-007 | `manifest.test.ts` | fields; PNG IHDR 192/512/180; page links |
+| REQ-WEB-008 | `swStrategy.test.ts` | one entry per kind after repeated loads; offline → cached + offline header; nothing cached → offline page; 503 not cached; POST passthrough; old static cache deleted |
+| REQ-WEB-009 | `install.test.ts` | prompt → button; standalone → none; iOS Safari → hint; macOS Safari → hint; CriOS → none |
+
+REQ-WEB-014's performance part (LCP < 2.5 s, FCP < 1.8 s) and the visual parity are proven by the
+browser evidence below, not by Vitest.
 
 ## Risks
 
-- Races: a Refresh while a request is in flight joins it (single flight in the loop); a region
-  change re-renders from the held snapshot and never fetches; a slow answer that arrives after the
-  page was hidden still renders but schedules nothing.
-- Timers and lifecycle: the loop clears its timer on hide and on every reschedule, so a hidden page
-  cannot leak a poll; tests assert the count of pending timers.
-- Service worker: a stale `sw.js` would pin old assets — `Cache-Control: no-cache` on it, and the
-  static cache name carries the `package.json` version (bumped to 0.2.0). Offline answers must be
-  marked, or the loop would treat a cached answer as success and reset its floor.
-- Cookie privacy: the router reads the cookie for this response only; tests assert `log` is never
-  called with it (REQ-API-003 stays).
-- Test host: Vitest runs in Node; `app.ts` and `sw.ts` touch `document`/`self` and are not imported
-  by tests. Shared modules gain `.ts` import extensions — esbuild (Wrangler) and Vitest accept them;
-  verified by `npm run bundle` in the gate.
-- Localization: new strings in en/uk/ru. Safari localizes its menus, so the hint uses Apple's
-  localized names in each language, checked against Apple's support pages during implementation.
-- Wrangler `build.command` on `deploy --dry-run`: assumed to run; checked in Group 1 by running
-  `npm run bundle` on a clean `public/app/`. If not, `bundle` script runs `npm run build` first.
+- Upstream politeness: the map adds a second request kind to the same host; one slot plus a 60 s
+  map floor keeps the worst case at 2 requests per 10 s, far below 2 per second. A map 429 opens the
+  shared window, so JSON freshness can suffer: logged, and REQ-REFRESH-006 marks staleness honestly.
+- Storage: the raster size is unknown until fetched; if it exceeds the Durable Object value limit,
+  the memory-only fallback applies (tested with a failing store).
+- Visual parity without SF fonts and SF Symbols: `ui-rounded` is exact in Safari, system face
+  elsewhere (D9); glyphs are drawn SVG. The owner judges parity from the screenshots.
+- Animation cost: the sweep is one CSS transform on a composited layer; paused when the page is
+  hidden by the browser; static under reduced motion.
+- Races and lifecycle: as in the first plan (single flight, timer cleared on hide, offline answers
+  counted as failures).
+- Existing tests change where the spec changes wording (listed above); no other existing test is
+  edited.
+- Wrangler `build.command` on the dry run: checked in Group 1; fallback `bundle` runs `build` first.
+- Localization: all new strings from the iOS String Catalog in en/uk/ru; Safari menu names from
+  Apple's localized UI.
 
 ## Tasks
 
-## Group 1: build plumbing and shared modules (no behaviour change)
-- [ ] T001 Move `Snapshot` to `feed.ts`, `ENDPOINT` to `coordinator.ts`; `.ts` import extensions;
-  three tsconfigs; `build` script; `wrangler.jsonc` assets + build; `.gitignore`. Gate green with
-  the existing 15 REQs. Files: `src/*.ts`, `tsconfig*.json`, `package.json`, `wrangler.jsonc`
-- [ ] T002 Test: `clientGraph.test.ts` proves REQ-WEB-006 (no Ubilling or external origin in the
-  client graph). Files: `tests/clientGraph.test.ts`
+## Group 1: build plumbing (no behaviour change)
+- [ ] T001 Move `Snapshot`/`ENDPOINT`; `.ts` imports; three tsconfigs; build; assets; `.gitignore`;
+  gate green with 15 REQs. Files: `src/*.ts`, `tsconfig*.json`, `package.json`, `wrangler.jsonc`
+- [ ] T002 Test: `clientGraph.test.ts` proves REQ-WEB-006 (graph part).
 
-## Group 2: region choice
-- [ ] T003 Test: router tests prove REQ-WEB-004 (order, POST /region, invalid cookie, no set-cookie
-  on `?region=`). Files: `tests/router.test.ts`
-- [ ] T004 Implement `regionCookie.ts`, router order, `POST /region`, `vary`. Files: `src/regionCookie.ts`, `src/router.ts`
+## Group 2: status rules
+- [ ] T003 Test: `status.test.ts` proves REQ-SURF-010.
+- [ ] T004 Implement caution phase and `isSurrounded`. Files: `src/status.ts`
 
-## Group 3: page model and enhanced page
-- [ ] T005 Test: `page.test.ts` proves REQ-WEB-005, REQ-WEB-010, REQ-REFRESH-006 (stale text),
-  REQ-REGION-001 and REQ-SURF-005 via `pageModel` from an API body; CSP part of REQ-WEB-006.
-  Files: `tests/page.test.ts`, `tests/router.test.ts`
-- [ ] T006 Implement `pageModel`, `snapshotFromApi`, new strings, picker, links, CSS, CSP. Files:
-  `src/page.ts`, `src/feed.ts`, `src/i18n.ts`, `src/router.ts`
+## Group 3: map through the coordinator
+- [ ] T005 Test: coordinator and router tests prove REQ-WEB-012 (server part).
+- [ ] T006 Implement `currentMap`, `MapStore`, `/v1/map`, worker binding. Files:
+  `src/coordinator.ts`, `src/worker.ts`, `src/router.ts`
 
-## Group 4: refresh loop
-- [ ] T007 Test: `refresh.test.ts` proves REQ-REFRESH-001, -002, -003, -005, -006, -010 and the
-  request-URL part of REQ-WEB-006, one injected clock per sequence. Files: `tests/refresh.test.ts`
-- [ ] T008 Implement `RefreshLoop`. Files: `src/client/refresh.ts`
+## Group 4: region choice and Regions page
+- [ ] T007 Test: router and `regionsPage.test.ts` prove REQ-WEB-004 and REQ-WEB-013.
+- [ ] T008 Implement `regionCookie.ts`, `regionsPage.ts`, routes. Files: `src/regionCookie.ts`,
+  `src/regionsPage.ts`, `src/router.ts`
 
-## Group 5: manifest, icons, service worker
-- [ ] T009 Test: `manifest.test.ts` proves REQ-WEB-007; `swStrategy.test.ts` proves REQ-WEB-008.
-  Files: `tests/manifest.test.ts`, `tests/swStrategy.test.ts`
-- [ ] T010 Implement manifest, icons (`sips`), `offline.html`, `_headers`, `swStrategy.ts`, `sw.ts`.
-  Files: `public/**`, `src/swStrategy.ts`, `src/sw.ts`
+## Group 5: iOS design for Status
+- [ ] T009 Test: `page.test.ts`, `theme.test.ts` prove REQ-WEB-011, REQ-WEB-005, REQ-WEB-010,
+  REQ-WEB-014 (static part), REQ-REGION-001, REQ-SURF-005, map card part of REQ-WEB-012, CSP.
+- [ ] T010 Implement `theme.ts`, `glyphs.ts`, `hero.ts`, `view.ts`, `page.ts`, strings. Files:
+  `src/theme.ts`, `src/glyphs.ts`, `src/hero.ts`, `src/view.ts`, `src/page.ts`, `src/i18n.ts`
 
-## Group 6: install affordance and wiring
-- [ ] T011 Test: `install.test.ts` proves REQ-WEB-009. Files: `tests/install.test.ts`
-- [ ] T012 Implement `install.ts` and `app.ts` (DOM wiring, picker, Refresh, SW registration).
-  Files: `src/client/install.ts`, `src/client/app.ts`
+## Group 6: refresh loop
+- [ ] T011 Test: `refresh.test.ts` proves REQ-REFRESH-001/002/003/005/006/010, REQ-WEB-006 (requests).
+- [ ] T012 Implement `src/client/refresh.ts`.
 
-## Group 7: docs, trace, smoke
-- [ ] T013 Flip 002 REQs to approved (owner approval of this plan); pointers in 001; README PWA
-  section; `plan.md`/`tasks.md` in `specs/002-...`. Gate: `npm run check` + `npm run bundle`.
-- [ ] T014 Manual smoke on `wrangler dev` in the built-in browser: manifest detected, SW active,
-  install offered (Chrome engine), status updates without reload, region pick persists across
-  reload, JS disabled page complete, offline reload shows last known. Evidence (screenshots +
-  notes) into the PR review packet; nothing calls Ubilling more than the coordinator allows
-  (`wrangler dev` uses the real upstream through the coordinator only).
-- [ ] T015 Independent review (`spec-driven-dev:code-reviewer`), repairs, PR with review packet;
-  status line to ★ orch · Lead. No deploy without the owner's yes.
+## Group 7: manifest, icons, service worker
+- [ ] T013 Test: `manifest.test.ts` (REQ-WEB-007), `swStrategy.test.ts` (REQ-WEB-008).
+- [ ] T014 Implement `public/**`, `src/swStrategy.ts`, `src/sw.ts`.
+
+## Group 8: install affordance and client wiring
+- [ ] T015 Test: `install.test.ts` proves REQ-WEB-009.
+- [ ] T016 Implement `src/client/install.ts`, `src/client/app.ts` (patches Status from `view.ts`,
+  SW registration, install button, Refresh without reload).
+
+## Group 9: evidence, docs, review, PR
+- [ ] T017 Flip 002 REQs to approved; pointers in spec 001; README; gate `npm run check` and
+  `npm run bundle`.
+- [ ] T018 Browser evidence on `wrangler dev` (local Worker; the real provider only through the
+  coordinator): screenshots phone 375 px and desktop 1440 px, Status alarm/quiet/caution/stale and
+  Regions, beside the iOS reference; no-JS check; keyboard pass; SW active, install offered,
+  offline reload; FCP/LCP from `PerformanceObserver` on a cold load (local now, deployed after the
+  owner's deploy yes). Saved in `build/review/runtime/`, committed shots in `docs/screenshots/`.
+- [ ] T019 `spec-driven-dev:code-reviewer`, repairs (at most two rounds), PR with the review packet
+  and screenshots; one-line status to ★ orch · Lead. No deploy without the owner's yes.
 
 ## Review lows
 (filled by implement)
 
 ## Verification
 
-`npm run check` (typecheck ×3, Biome, Vitest, trace with the 002 REQs approved) and
-`npm run bundle` (build + Wrangler dry run) green; the manual smoke of T014 recorded; CI Gate green
-on the PR.
+`npm run check` (three typechecks, Biome, Vitest, trace with every 002 REQ approved and cited) and
+`npm run bundle` green; T018 evidence recorded, side by side with the iOS reference; CI Gate green
+on the PR; the deployed FCP/LCP measured after the owner approves the deploy.

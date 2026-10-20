@@ -1,9 +1,10 @@
 # Feature specification: installable web app
 
 Feature: `002-installable-web-app` · Created: 2026-10-20
-Status: parked on 2026-10-20 by the owner (relayed by the orchestrator): no code; the web app waits for
-a later decision. The plan was approved before parking. New requirements stay `proposed` until
-then; shared requirements keep the status the owner gave them in `regional-check` or in slice 1.
+Status: draft, resumed on 2026-10-20 by the owner (O5) with the iOS design and the alert map in
+scope; waiting for the owner's approval of the revised plan. Requirements below are `proposed`
+until then; shared requirements keep the status the owner gave them in `regional-check` or in
+slice 1.
 Input: the owner's decisions PD-107 (Drive Check is the multiplatform testbed of his agentic loops)
 and PD-108, option A (an installable web app served by the same Worker), and his answers of
 2026-10-20 (see "Owner decisions").
@@ -12,22 +13,29 @@ and PD-108, option A (an installable web app served by the same Worker), and his
 
 The status page of slice 1 becomes an installable web app (PWA) served by the same Worker:
 
-- a region picker whose choice is kept in the visitor's browser;
+- the look of the iOS Status tab, which is the single reference: the radar hero, the status in the
+  traffic-light colours including the yellow "Stay Alert", the nearby card and the inline alert map,
+  served by the Worker; the page is the project's public showcase, so visual quality is an
+  acceptance criterion, not later polish;
+- a Regions page, opened from the map as in iOS, which lists every region's status and is where a
+  visitor picks their region; the choice is kept in the visitor's browser;
 - automatic refresh in the open page, only through `GET /v1/alerts`, following the apps' refresh
   policy and the Worker's 10 s floor;
 - a web app manifest, icons and a service worker, so Chrome, Edge and Safari can install it, and the
   last known status opens offline;
 - an install button where the browser offers one, and a short hint in Safari, which does not.
 
-The server-rendered page stays complete without JavaScript: status, update time, nearby alerts,
-the region picker and the refresh link work with scripts off. JavaScript only enhances it.
+The server-rendered pages stay complete without JavaScript: status, update time, nearby alerts,
+the map, the Regions page with its region choice, and the refresh link work with scripts off.
+JavaScript only enhances them.
 
 ## Out of scope for slice 2
 
 No alert history, accounts, ads or analytics, ever (core, "Never"). Not in this slice: push or
 system notifications, background sync or periodic background refresh, the Chrome extension
-(PD-108 "may follow later"), the device Geolocation API, the "Stay Alert" status (REQ-SURF-010),
-a light theme, switching the apps to this API, and the deployment (the owner's yes).
+(PD-108 "may follow later"), the device Geolocation API, the iOS Details tab, the Pro crown (the web
+sells nothing), a light theme (O6: the apps are dark only, one look everywhere), switching the apps
+to this API, and the deployment (the owner's yes).
 
 ## User scenarios and testing
 
@@ -58,10 +66,11 @@ and sees it on every later visit.
 
 Acceptance scenarios:
 
-1. Given a person picks Lviv Oblast with JavaScript on, when the choice is made, then the page shows
-   Lviv Oblast at once from the held data, without a network request, and remembers it.
-2. Given scripts are off, when the person submits the picker, then the server remembers the choice
-   and shows Lviv Oblast.
+1. Given a person opens Regions from the map and picks Lviv Oblast, when the choice is made, then
+   the Status page shows Lviv Oblast and the choice is remembered, with or without JavaScript.
+2. Given the Regions page, when it renders, then the current region sits in its own card with a
+   status pill, regions under alert are grouped first under "Alert Active · N", the rest under
+   "Other regions", each row with its status dot, as in iOS.
 3. Given a remembered choice, when the person opens `/` again, then the first response already
    shows that region; a link with `?region=` shows its region without changing the remembered one.
 
@@ -137,8 +146,8 @@ definition; slice 2 extends each to the browser client, and tests of the client 
 
 Status: proposed
 
-Given the page renders\
-When the person picks a region from the picker\
+Given the Regions page renders\
+When the person picks a region from its list\
 Then the choice is saved in a first-party cookie `region` (the catalog id only, `Path=/`,
 `SameSite=Lax`, `Secure`, one year), the page shows that region, and the region shown is chosen in
 this order: `?region=`, the cookie, the network region (REQ-WEB-002), Kyiv city; an unknown cookie
@@ -156,8 +165,8 @@ Status: proposed
 
 Given the page is served\
 When scripts are off, blocked or fail\
-Then the server-rendered page alone shows the status, its time, nearby alerts, the picker, the
-refresh link and the language links; with scripts on, the client renders the same strings, colours
+Then the server-rendered pages alone show the status, its time, nearby alerts, the map, the
+Regions page and its region choice, the refresh link and the language links; with scripts on, the client renders the same strings, colours
 and structure from the same modules as the server (REQ-SURF-001, one wording each), and the status
 keeps being the text of the only `h1`
 
@@ -167,8 +176,9 @@ Status: proposed
 
 Given the client needs the status\
 When it makes any request\
-Then it asks only the same-origin `GET /v1/alerts`, never Ubilling or a third party, and the page's
-Content Security Policy allows scripts, connections and the service worker from its own origin only
+Then it asks only the same origin (`GET /v1/alerts`, the map `GET /v1/map`, its own static files),
+never Ubilling or a third party, and the page's Content Security Policy allows scripts,
+connections, images, fonts and the service worker from its own origin only
 
 Reason: the Worker's coordinator is the only Ubilling client (REQ-PROVIDER-002); a browser asking
 Ubilling directly would bypass the floor and the 429 window.
@@ -188,9 +198,9 @@ links it and an `apple-touch-icon` of 180 px
 Status: proposed
 
 Given the service worker is installed\
-When the page or `/v1/alerts` is requested\
-Then it tries the network first and keeps only the latest successful answer of each (one page, one
-alerts response, overwritten); offline it serves those, marked as offline so the client counts them
+When a page, `/v1/alerts` or `/v1/map` is requested\
+Then it tries the network first and keeps only the latest successful answer of each (one Status
+page, one Regions page, one alerts response, one map, overwritten); offline it serves those, marked as offline so the client counts them
 as failures, and with no saved page an offline page that says "Unavailable" in en, uk and ru; the
 app's own static files come from a versioned cache that a new version replaces
 
@@ -223,14 +233,80 @@ Status: proposed
 
 Given the web page or the web app shows the status\
 When it renders\
-Then it follows the iOS phone Status tab as the reference, one look on every surface: the same
-layout, hierarchy, typography and palette, and the inline alert map (`MapCardView`, the upstream
-raster with its fetch time and an accessible label) fetched through the Worker, never from the
-browser to the provider
+Then it follows the iOS phone Status tab as it ships (`regional-check` `StatusView`, its theme
+tokens in `Theme+Redesign.swift` and `DriveCheckColors.swift`), top to bottom: a toolbar with the
+centred title "Drive Check" and Refresh where iOS has the crown; the hero (radar ring of 60 ticks,
+tinted disc, status glyph, a sweep turning once per 4 s and still under reduced motion, a glow in
+the accent), the status title in the accent, the region with a location glyph, the meta line
+("Updated HH:mm", or "Last known: {status} · HH:mm" when stale); the nearby card (warning glyph in
+`#E8BA62`, at most two names then "+N"); the map card (REQ-WEB-012); then the informational note,
+languages and API link in the footer. The palette, the translucent surfaces, radii (22 cards),
+paddings (screen 20, cards 18/16) and the type scale (largeTitle 34 bold, title3 20 semibold,
+body 17, subheadline 15 tabular, caption 12) are the iOS tokens, with the rounded system face; the
+glyphs are SVG drawings in the spirit of the SF Symbols the app uses (SF Symbols themselves may not
+ship on the web)
 
 Reason: the owner, 2026-10-20, after seeing the slice 1 page: «нужна карта и брать за референс иос
-дизайн - везде один вид». The slice 1 page shares only the palette and reads as a sketch. Open
-before planning: how the Worker serves the map raster within the provider's polite-load rules.
+дизайн - везде один вид»; and, relayed by the orchestrator, that the page must not stay poor-looking
+(«нельзя оставлять ужасным»). The slice 1 page shares only the palette.
+
+### REQ-WEB-012 — The alert map through the Worker
+
+Status: proposed
+
+Given a page shows the map card\
+When the browser loads `GET /v1/map`\
+Then the Worker answers with the latest held Ubilling `?map=nightmode` raster (1000 × 670); the
+coordinator asks the provider for it only when a client asks and the held image is older than
+60 s, never while a JSON request is in flight or a 429 window is open, keeps one overwritten
+image, and answers 503 when it holds none; the card reserves the 1000 : 670 frame, shows the
+caption "N of 25 regions under alert · N min ago" (age from the image's own fetch time) and an
+accessible label naming the regions under alert, and its whole surface links to the Regions page;
+without an image it shows "Couldn't load the map." and no earlier image
+
+Reason: the iOS card fetches the same raster once per session (`MapImageSource`, `MapViewModel`);
+one coordinator for both requests keeps the host below Ubilling's 2 requests per second and
+honours its 429 for both (REQ-PROVIDER-002).
+
+### REQ-WEB-013 — The Regions page
+
+Status: proposed
+
+Given a visitor opens Regions from the map card or the address `/regions`\
+When it renders\
+Then it follows the iOS region list: the title "Regions" with a way back to Status, the current
+region in its own card with a location glyph and a status pill, the regions under alert grouped
+first under "Alert Active · N" (shown only when there are any) and the rest under "Other regions",
+each row a status dot and the name; every row is a control that makes that region the visitor's
+region (REQ-WEB-004) and returns to Status, with and without JavaScript
+
+Difference from iOS: the iOS list is read-only, because the app follows device location; on the
+web the list is where the visitor picks the region (O8).
+
+### REQ-WEB-014 — Responsive, fast, accessible showcase
+
+Status: proposed
+
+Given a visitor on a phone from 375 px wide up to a desktop\
+When the Status or Regions page renders\
+Then there is no horizontal scrolling, the content keeps the iOS single-column composition centred
+with a maximum width on wide screens, every text colour reaches WCAG AA contrast (4.5 : 1, 3 : 1
+for large text) on its own background, and a cold load of `/` on the deployed Worker reaches a
+Largest Contentful Paint under 2.5 s and a First Contentful Paint under 1.8 s as measured in the
+browser and stated in the PR, with phone and desktop screenshots
+
+### REQ-SURF-010 — A yellow "stay alert" status when alerts surround a quiet region
+
+Status: proposed (approved in iOS on 2026-09-17, amended 2026-09-23; applies here with O7)
+
+Given the shown region is quiet on fresh data and at least one neighbouring region is under alert\
+When half or more of its neighbours are under alert, or more than half of the country is, or, for
+Kyiv city, Kyiv Oblast is\
+Then the web Status hero shows "Stay Alert" in yellow `#E8BA62` with the warning glyph instead of
+"No Alert", and the nearby card keeps naming the neighbours; stale data never turns yellow
+
+Difference from iOS: none in the rule; the web reads it from the server's neighbour table, which is
+the iOS `NearbyRegionPolicy` table (slice 1).
 
 ## Decisions, with reasons
 
@@ -264,6 +340,21 @@ on `wrangler dev`, and the evidence goes into the PR's review packet. No Playwri
 The icons are the iOS `AppIcon.png` (1024 px, `regional-check`, already public in the App Store),
 scaled with macOS `sips` to 512, 192 and 180 px and committed; nothing generates them in CI.
 
+### D9 — The rounded system face, no web font
+
+The type uses `ui-rounded` (SF Pro Rounded in Safari, as in the app), then `system-ui`. A
+self-hosted rounded web font would match Chrome on every platform more closely, but adds a
+download to the first paint (REQ-WEB-014) and a binary of another origin's licence to the
+repository; the owner may still ask for one when approving the plan.
+
+### D10 — The map raster in the Durable Object
+
+The coordinator that already owns the JSON request owns the map request too, so one place
+serialises every request to the host and one 429 window covers both. The image is kept in the
+object's storage as one overwritten value with its fetch time, so a restarted object serves it at
+once; if the raster ever exceeds the storage value limit, it is kept in memory only. The
+browser caches `/v1/map` for 60 s (`Cache-Control: public, max-age=60`).
+
 ## Owner decisions
 
 - O1, 2026-10-20: PD-107 and PD-108 option A, as relayed in this session's brief: an installable web
@@ -272,3 +363,12 @@ scaled with macOS `sips` to 512, 192 and 180 px and committed; nothing generates
 - O2, 2026-10-20: the region choice is kept in a cookie («Cookie (Recommended)»).
 - O3, 2026-10-20: the client is compiled by `tsc`, no new dependency («tsc, no new dep»).
 - O4, 2026-10-20: browser-level checks are a recorded manual smoke («Manual smoke»).
+- O5, 2026-10-20: after parking, the owner resumed slice 2 in this session («Сделать сейчас») with
+  the iOS design as the reference and the alert map; relayed by the orchestrator the same day,
+  visual quality, responsive layout, accessibility, a measured first paint and screenshots in the
+  PR are acceptance criteria.
+- O6, 2026-10-20: dark theme only, as the apps («Только тёмная»); this overrides the
+  orchestrator's request for a light theme.
+- O7, 2026-10-20: the yellow "Stay Alert" status is in scope, as in iOS («Да, как в iOS»).
+- O8, 2026-10-20: Status and Regions in this slice; Details later; no Pro crown
+  («Status + Regions»).
