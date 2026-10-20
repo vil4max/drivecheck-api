@@ -1,6 +1,6 @@
 import { alertsResponse } from "./api.ts";
 import type { CoordinatorView, MapImage } from "./coordinator.ts";
-import { negotiateLanguage } from "./i18n.ts";
+import { LANGS, negotiateLanguage } from "./i18n.ts";
 import { renderPage } from "./page.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
@@ -43,9 +43,15 @@ async function chooseRegion(request: Request): Promise<Response> {
   const form = new URLSearchParams(await request.text());
   const region = regionById(form.get("region") ?? "");
   if (region === undefined) return new Response("Unknown region", { status: 400 });
+  const lang = form.get("lang") ?? "";
   return new Response(null, {
     status: 303,
-    headers: { location: "/", "set-cookie": regionCookie(region.id), "cache-control": "no-store" },
+    headers: {
+      // Back in the language the visitor chose; anything else falls to negotiation.
+      location: (LANGS as readonly string[]).includes(lang) ? `/?lang=${lang}` : "/",
+      "set-cookie": regionCookie(region.id),
+      "cache-control": "no-store",
+    },
   });
 }
 

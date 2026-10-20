@@ -118,7 +118,7 @@ describe("Status page", () => {
     expect(page).toMatch(/<h1[^>]*>Stay Alert<\/h1>/);
     expect(page).toContain("Updated 12:00");
     expect(page).toContain("Nearby: Kyiv Oblast");
-    expect(page).toMatch(/<img[^>]+src="\/v1\/map"/);
+    expect(page).toContain("background-image:url(/v1/map)");
     expect(page).toMatch(/<a[^>]+href="\/regions\?lang=en"[^>]*class="card map"/);
     expect(page).toMatch(/<a[^>]+class="icon-btn end"[^>]+href="\/\?lang=en"/);
     // Only an external module script, never inline code (CSP).
@@ -190,6 +190,7 @@ describe("Regions page", () => {
   test("REQ-WEB-004 REQ-WEB-013 every row picks its region through POST /region", () => {
     const page = renderRegions(regionsModel(snapshot, region("lviv"), "en"));
     expect(page).toMatch(/<form method="post" action="\/region"/);
+    expect(page).toContain('<input type="hidden" name="lang" value="en">');
     expect(page.match(/<button[^>]+name="region" value="[a-z-]+"/g)).toHaveLength(25);
     expect(page).toContain('value="lviv" aria-current="true"');
   });

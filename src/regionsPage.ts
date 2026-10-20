@@ -26,7 +26,7 @@ export function renderRegions(model: RegionsModel): string {
       : `<section class="section"><h2>${escapeHtml(s.alertSection(model.alerting.length))}</h2><ul class="card group alerting">${model.alerting.map((r) => row(r, s.alertShort)).join("")}</ul></section>`;
   const main = `<h1 class="page-title">${escapeHtml(s.regions)}</h1>
 <div class="card current accent-${model.current.accent}"><span class="pin">${glyph("location")}</span><span class="grow"><span class="label">${escapeHtml(s.currentRegion)}</span><span class="name">${escapeHtml(model.current.name)}</span></span>${pill}</div>
-<form method="post" action="/region" class="regions">
+<form method="post" action="/region" class="regions"><input type="hidden" name="lang" value="${model.lang}">
 ${alerting}
 <section class="section"><h2>${escapeHtml(s.otherRegions)}</h2><ul class="card group">${model.others.map((r) => row(r, s.alertShort)).join("")}</ul></section>
 </form>`;

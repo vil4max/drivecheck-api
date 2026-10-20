@@ -95,8 +95,8 @@ ${heroGraphic(model.symbol)}
 <p class="meta" id="meta">${escapeHtml(model.meta)}</p>
 </section>
 ${nearby}
-<a href="${pageHref("/regions", model.lang)}" class="card map" id="map" aria-describedby="map-hint">
-<img src="/v1/map" width="1000" height="670" alt="${escapeHtml(model.mapLabel)}" decoding="async">
+<a href="${pageHref("/regions", model.lang)}" class="card map" id="map" aria-label="${escapeHtml(model.mapLabel)}" aria-describedby="map-hint">
+<span class="image" style="background-image:url(/v1/map)"></span>
 ${caption}
 <span class="failed">${glyph("offline")}<span>${escapeHtml(s.mapError)}</span></span>
 <span class="sr-only" id="map-hint">${escapeHtml(s.opensRegions)}</span>

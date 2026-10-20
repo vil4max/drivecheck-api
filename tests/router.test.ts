@@ -253,6 +253,9 @@ describe("region choice", () => {
     expect(ok.headers.get("set-cookie")).toBe(
       "region=lviv; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
     );
+    // The page the visitor came from keeps its language.
+    expect((await post("region=lviv&lang=uk")).headers.get("location")).toBe("/?lang=uk");
+    expect((await post("region=lviv&lang=xx")).headers.get("location")).toBe("/");
     const unknown = await post("region=atlantis");
     expect(unknown.status).toBe(400);
     expect(unknown.headers.get("set-cookie")).toBeNull();

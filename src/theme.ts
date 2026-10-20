@@ -114,10 +114,9 @@ h1{margin:0;font-size:2.125rem;line-height:1.15;font-weight:700;letter-spacing:-
 .nearby{display:flex;gap:.75rem;align-items:center;padding:.75rem 1.125rem;font-weight:600;margin:0}
 .nearby svg{flex:none;width:1.375rem;height:1.375rem;color:var(--caution)}
 .map{position:relative;display:block;overflow:hidden;aspect-ratio:1000/670;text-decoration:none}
-.map img{display:block;width:100%;height:100%;object-fit:contain;color:transparent;font-size:0}
-.map .caption{position:absolute;left:0;right:0;bottom:0;padding:1.5rem 1.125rem .5rem;font-size:.75rem;text-align:center;background:linear-gradient(to bottom,rgba(12,14,17,0),rgba(12,14,17,.85))}
+.map .image{position:absolute;inset:0;background:center/contain no-repeat}
+.map .caption{position:absolute;z-index:2;left:0;right:0;bottom:0;padding:1.5rem 1.125rem .5rem;font-size:.75rem;text-align:center;background:linear-gradient(to bottom,rgba(12,14,17,0),rgba(12,14,17,.85))}
 .map .failed{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:var(--text2)}
-.map.is-failed img,.map.is-failed .caption{display:none}
 .map.is-failed .failed{display:flex}
 .footer{text-align:center;color:var(--text2);font-size:.8125rem;display:flex;flex-direction:column;gap:.5rem;padding-top:.5rem}
 .footer p{margin:0}

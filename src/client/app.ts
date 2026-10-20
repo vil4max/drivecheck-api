@@ -65,11 +65,12 @@ function setUpInstall(): void {
 
 function setUpMap(): void {
   const card = byId("map");
-  const image = card?.querySelector("img");
-  if (card === null || card === undefined || image === null || image === undefined) return;
-  const failed = () => card.classList.add("is-failed");
-  image.addEventListener("error", failed);
-  if (image.complete && image.naturalWidth === 0) failed();
+  if (card === null) return;
+  // The map is a CSS background, which draws nothing when it fails; this probe (the same cached
+  // request) tells the card to say so, as the iOS card does.
+  const probe = new Image();
+  probe.addEventListener("error", () => card.classList.add("is-failed"));
+  probe.src = "/v1/map";
 }
 
 function patch(model: StatusModel, last: { model: StatusModel | null }): void {
@@ -100,8 +101,8 @@ function patch(model: StatusModel, last: { model: StatusModel | null }): void {
   }
   const caption = byId("map-caption");
   if (caption !== null && model.mapCaption !== null) caption.textContent = model.mapCaption;
-  const image = byId("map")?.querySelector("img");
-  if (image !== null && image !== undefined) image.alt = model.mapLabel;
+  const card = byId("map");
+  card?.setAttribute("aria-label", model.mapLabel);
   last.model = model;
 }
 
