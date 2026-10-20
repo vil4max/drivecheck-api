@@ -1,5 +1,3 @@
-export const ENDPOINT = "https://ubilling.net.ua/aerialalerts/";
-
 export interface RegionState {
   alertnow: boolean;
   changed?: string;
@@ -9,6 +7,13 @@ export interface Feed {
   source: string;
   cachedat: string;
   states: Record<string, RegionState>;
+}
+
+/** One decoded answer with the times it was fetched and, when parseable, cached upstream. */
+export interface Snapshot {
+  feed: Feed;
+  fetchedAt: number;
+  serverCachedAt: number | null;
 }
 
 export class FeedError extends Error {}

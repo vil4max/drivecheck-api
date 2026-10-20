@@ -1,5 +1,5 @@
-import type { CoordinatorView } from "./coordinator";
-import { checkedAt, isStale } from "./status";
+import type { CoordinatorView } from "./coordinator.ts";
+import { checkedAt, isStale } from "./status.ts";
 
 export const API_VERSION = 1;
 

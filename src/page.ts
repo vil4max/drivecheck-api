@@ -1,6 +1,6 @@
-import { LANGS, STRINGS } from "./i18n";
-import type { Lang } from "./regions";
-import type { Phase, StatusView } from "./status";
+import { LANGS, STRINGS } from "./i18n.ts";
+import type { Lang } from "./regions.ts";
+import type { Phase, StatusView } from "./status.ts";
 
 // regional-check DriveCheckColors.swift.
 export const PALETTE = {

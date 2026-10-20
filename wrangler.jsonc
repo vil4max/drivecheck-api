@@ -3,6 +3,12 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
+  // Compiles the browser client and the service worker into public/app before dev, deploy and
+  // the CI dry run (spec 002, D5).
+  "build": { "command": "npm run build" },
+  // Static files first; "/" and the API fall through to the Worker. "none" keeps offline.html at
+  // its own path instead of an extension-less alias.
+  "assets": { "directory": "./public", "html_handling": "none" },
   "durable_objects": {
     "bindings": [{ "name": "FEED", "class_name": "FeedCoordinatorObject" }]
   },

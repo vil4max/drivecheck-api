@@ -1,5 +1,5 @@
-import type { Snapshot } from "./coordinator";
-import { neighbours, type Region } from "./regions";
+import type { Snapshot } from "./feed.ts";
+import { neighbours, type Region } from "./regions.ts";
 
 /** Twice the apps' 60 s base interval (REQ-REFRESH-006). */
 export const STALE_AFTER_MS = 2 * 60_000;

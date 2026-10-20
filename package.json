@@ -1,14 +1,15 @@
 {
   "name": "drivecheck-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Cached Ubilling aerial-alerts API and status page for Drive Check",
+  "description": "Cached Ubilling aerial-alerts API and installable web app for Drive Check",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.sw.json --noEmit",
+    "build": "tsc -p tsconfig.client.json && tsc -p tsconfig.sw.json",
     "lint": "biome check --error-on-warnings .",
     "test": "vitest run",
     "test:report": "vitest run --reporter=default --reporter=json --outputFile=reports/vitest.json",

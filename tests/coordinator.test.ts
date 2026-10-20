@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { FeedCoordinator } from "../src/coordinator";
-import { ENDPOINT } from "../src/feed";
+import { ENDPOINT, FeedCoordinator } from "../src/coordinator";
 import { FakeWorld, feedJson, hangingUpstream, jsonResponse, T0 } from "./support";
 
 function setup() {

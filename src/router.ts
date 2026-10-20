@@ -1,9 +1,9 @@
-import { alertsResponse } from "./api";
-import type { CoordinatorView } from "./coordinator";
-import { negotiateLanguage } from "./i18n";
-import { renderPage } from "./page";
-import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions";
-import { statusView } from "./status";
+import { alertsResponse } from "./api.ts";
+import type { CoordinatorView } from "./coordinator.ts";
+import { negotiateLanguage } from "./i18n.ts";
+import { renderPage } from "./page.ts";
+import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
+import { statusView } from "./status.ts";
 
 export interface RouteInput {
   request: Request;

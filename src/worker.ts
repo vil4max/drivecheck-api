@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { type CoordinatorView, FeedCoordinator, type StoredState } from "./coordinator";
-import { route, ukrainianRegionCode } from "./router";
+import { type CoordinatorView, FeedCoordinator, type StoredState } from "./coordinator.ts";
+import { route, ukrainianRegionCode } from "./router.ts";
 
 export interface Env {
   FEED: DurableObjectNamespace<FeedCoordinatorObject>;

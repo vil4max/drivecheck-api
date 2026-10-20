@@ -1,5 +1,5 @@
-import type { Lang } from "./regions";
-import type { Phase } from "./status";
+import type { Lang } from "./regions.ts";
+import type { Phase } from "./status.ts";
 
 export const LANGS: readonly Lang[] = ["en", "uk", "ru"];
 

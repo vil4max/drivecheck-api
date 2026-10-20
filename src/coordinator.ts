@@ -1,16 +1,13 @@
-import { ENDPOINT, type Feed, kyivTimeToEpochMs, parseFeed } from "./feed";
-import { rateLimitDeadline } from "./retryAfter";
+import { kyivTimeToEpochMs, parseFeed, type Snapshot } from "./feed.ts";
+import { rateLimitDeadline } from "./retryAfter.ts";
 
+export const ENDPOINT = "https://ubilling.net.ua/aerialalerts/";
 export const FETCH_FLOOR_MS = 10_000;
 export const TRANSIENT_RETRY_MS = 2_000;
 export const UPSTREAM_TIMEOUT_MS = 15_000;
 const USER_AGENT = "DriveCheckAPI/0.1 (+https://github.com/vil4max/drivecheck-api)";
 
-export interface Snapshot {
-  feed: Feed;
-  fetchedAt: number;
-  serverCachedAt: number | null;
-}
+export type { Snapshot };
 
 export interface CoordinatorView {
   snapshot: Snapshot | null;
