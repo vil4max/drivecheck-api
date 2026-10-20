@@ -206,3 +206,53 @@ describe("GET /", () => {
     expect(fallback).toContain("Kyiv");
   });
 });
+
+describe("region choice", () => {
+  const regionName = async (res: Response) =>
+    /<title>[^<]*— ([^<·]+) · Drive Check<\/title>/.exec(await res.text())?.[1]?.trim();
+
+  test("REQ-WEB-004 the region shown: ?region=, then the cookie, then the network, then Kyiv", async () => {
+    const lviv = { cookie: "theme=x; region=lviv" };
+    expect(await regionName(await call({ path: "/", headers: lviv, regionCode: "30" }))).toBe(
+      "Lviv Oblast",
+    );
+    expect(await regionName(await call({ path: "/?region=odesa", headers: lviv }))).toBe(
+      "Odesa Oblast",
+    );
+    const bad = { cookie: "region=../x" };
+    expect(await regionName(await call({ path: "/", headers: bad, regionCode: "46" }))).toBe(
+      "Lviv Oblast",
+    );
+    expect(await regionName(await call({ path: "/", headers: bad }))).toBe("Kyiv");
+  });
+
+  test("REQ-WEB-004 a ?region= link shows its region without remembering it", async () => {
+    const res = await call({ path: "/?region=odesa", headers: { cookie: "region=lviv" } });
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.headers.get("vary")).toContain("Cookie");
+  });
+
+  test("REQ-WEB-004 POST /region remembers a catalog region and returns to Status", async () => {
+    const post = (body: string) =>
+      route({
+        request: new Request("https://drivecheck.example/region", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body,
+        }),
+        regionCode: null,
+        getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+        getMap: async () => null,
+        clock: () => T0,
+      });
+    const ok = await post("region=lviv");
+    expect(ok.status).toBe(303);
+    expect(ok.headers.get("location")).toBe("/");
+    expect(ok.headers.get("set-cookie")).toBe(
+      "region=lviv; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
+    );
+    const unknown = await post("region=atlantis");
+    expect(unknown.status).toBe(400);
+    expect(unknown.headers.get("set-cookie")).toBeNull();
+  });
+});
