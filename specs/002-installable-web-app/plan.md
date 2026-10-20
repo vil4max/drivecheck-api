@@ -122,13 +122,13 @@ browser evidence below, not by Vitest.
 ## Tasks
 
 ## Group 1: build plumbing (no behaviour change)
-- [ ] T001 Move `Snapshot`/`ENDPOINT`; `.ts` imports; three tsconfigs; build; assets; `.gitignore`;
+- [x] T001 Move `Snapshot`/`ENDPOINT`; `.ts` imports; three tsconfigs; build; assets; `.gitignore`;
   gate green with 15 REQs. Files: `src/*.ts`, `tsconfig*.json`, `package.json`, `wrangler.jsonc`
-- [ ] T002 Test: `clientGraph.test.ts` proves REQ-WEB-006 (graph part).
+- [x] T002 Test: `clientGraph.test.ts` proves REQ-WEB-006 (graph part).
 
 ## Group 2: status rules
-- [ ] T003 Test: `status.test.ts` proves REQ-SURF-010.
-- [ ] T004 Implement caution phase and `isSurrounded`. Files: `src/status.ts`
+- [x] T003 Test: `status.test.ts` proves REQ-SURF-010.
+- [x] T004 Implement caution phase and `isSurrounded`. Files: `src/status.ts`
 
 ## Group 3: map through the coordinator
 - [ ] T005 Test: coordinator and router tests prove REQ-WEB-012 (server part).

@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
-const SRC = resolve(import.meta.dirname, "../src");
+const SRC = fileURLToPath(new URL("../src", import.meta.url));
 const IMPORT = /(?:import|export)\s[^;]*?from\s+"(\.{1,2}\/[^"]+)"/g;
 // Any absolute http(s) origin, e.g. the provider or a CDN; same-origin paths start with "/".
 const ORIGIN = /https?:\/\/[a-z0-9.-]+/gi;
