@@ -329,3 +329,32 @@ describe("GET /offline", () => {
     expect(asked).toBe(false);
   });
 });
+
+describe("no visitor data in logs", () => {
+  test("REQ-API-003 REQ-WEB-004 the region cookie is read for the response and never logged", async () => {
+    const lines: unknown[][] = [];
+    const methods = ["log", "info", "warn", "error", "debug"] as const;
+    const saved = methods.map((m) => console[m]);
+    for (const m of methods) console[m] = (...args: unknown[]) => lines.push(args);
+    try {
+      const res = await call({ path: "/?lang=en", headers: { cookie: "region=zakarpattia" } });
+      expect(await res.text()).toContain("Zakarpattia Oblast");
+      await route({
+        request: new Request("https://drivecheck.example/region", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "region=zakarpattia&lang=en",
+        }),
+        regionCode: "46",
+        getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+        getMap: async () => null,
+        clock: () => T0,
+      });
+    } finally {
+      methods.forEach((m, i) => {
+        console[m] = saved[i]!;
+      });
+    }
+    expect(JSON.stringify(lines)).not.toMatch(/zakarpattia|region=|46/);
+  });
+});

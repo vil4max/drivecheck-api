@@ -33,5 +33,5 @@ One pull request. Inside each group the tests come first and are seen failing be
 
 ## Group 4 — release of the slice
 
-- [x] T040 Independent review by the orchestrator; the owner's yes; merge.
+- [x] T040 Independent review; the owner's yes; merge.
 - [x] T041 [Owner] Deploy with Wrangler and share the URL.
