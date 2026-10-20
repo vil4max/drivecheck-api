@@ -171,7 +171,23 @@ browser evidence below, not by Vitest.
   and screenshots; one-line status to ★ orch · Lead. No deploy without the owner's yes.
 
 ## Review lows
-(filled by implement)
+
+From the independent review of b988ab9 (not fixed unless the owner asks):
+- The 2 s retry timer is not tracked, so a page hidden within those 2 s still sends the retry
+  (`src/client/refresh.ts`, `run`).
+- The 3 s map gap counts from the JSON attempt's start, not from its 2 s retry
+  (`src/coordinator.ts`, `currentMap`).
+- The map's `lastAttemptAt` is saved after the request, so a coordinator restarted mid-request
+  loses the 60 s map floor; the failing map store has no test.
+- iPadOS Safari reports a Macintosh user agent and gets the Mac "File → Add to Dock" hint.
+- `/app/*` is cache-first keyed by the hand-bumped `VERSION`; a deploy that changes the client
+  without bumping `package.json` keeps installed users on the old script.
+- A page loaded without data has no `#map-caption`, and the client never adds it later; each page
+  requests `/v1/map` twice (background and probe), both cached for 60 s.
+- On Regions, quiet and missing regions differ only by dot colour.
+- REQ-WEB-004's "never logs the cookie" has no test; group 1 has no behaviour red (guard test).
+- Fixed in passing with the high finding on offline: a shared `?region=` page no longer replaces
+  the visitor's saved page.
 
 ## Verification
 

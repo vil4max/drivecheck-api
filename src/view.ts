@@ -10,6 +10,8 @@ export type Accent = "clear" | "alert" | "caution" | "stale" | "unavailable";
 /** Everything the Status page shows, computed once for the server render and the client patch. */
 export interface StatusModel {
   lang: Lang;
+  /** The `?region=` the page was opened with, kept in its links (REQ-WEB-004); null otherwise. */
+  linkRegion: string | null;
   regionId: string;
   regionName: string;
   title: string;
@@ -19,6 +21,8 @@ export interface StatusModel {
   nearby: string | null;
   mapCaption: string | null;
   mapLabel: string;
+  /** The Worker held no map when the page rendered; the card then says so even without JS. */
+  mapMissing: boolean;
   documentTitle: string;
 }
 
@@ -49,6 +53,7 @@ export function statusModel(
   lang: Lang,
   now: number,
   mapFetchedAt: number | null,
+  linkRegion: string | null = null,
 ): StatusModel {
   const s = STRINGS[lang];
   const view = statusView(snapshot, region, now);
@@ -92,6 +97,7 @@ export function statusModel(
   const regionName = region.names[lang];
   return {
     lang,
+    linkRegion,
     regionId: region.id,
     regionName,
     title,
@@ -101,6 +107,7 @@ export function statusModel(
     nearby: showNearby ? s.nearby(nearbyNames(view.nearby.map((r) => r.names[lang]))) : null,
     mapCaption,
     mapLabel,
+    mapMissing: mapFetchedAt === null,
     documentTitle: `${title} — ${regionName} · Drive Check`,
   };
 }
@@ -119,13 +126,19 @@ export interface RegionRow {
 
 export interface RegionsModel {
   lang: Lang;
+  linkRegion: string | null;
   current: { name: string; accent: Accent; pill: string | null };
   alerting: RegionRow[];
   others: RegionRow[];
 }
 
 /** iOS `RegionListView`: the current region first, then regions under alert, then the rest. */
-export function regionsModel(snapshot: Snapshot | null, region: Region, lang: Lang): RegionsModel {
+export function regionsModel(
+  snapshot: Snapshot | null,
+  region: Region,
+  lang: Lang,
+  linkRegion: string | null = null,
+): RegionsModel {
   const s = STRINGS[lang];
   const rows: RegionRow[] = REGIONS.map((r) => {
     const state = snapshot?.feed.states[r.apiKey];
@@ -139,6 +152,7 @@ export function regionsModel(snapshot: Snapshot | null, region: Region, lang: La
   const own = rows.find((r) => r.current)!;
   return {
     lang,
+    linkRegion,
     current: {
       name: own.name,
       accent: own.state === "on" ? "alert" : own.state === "off" ? "clear" : "unavailable",

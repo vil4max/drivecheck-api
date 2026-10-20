@@ -30,12 +30,13 @@ export function renderRegions(model: RegionsModel): string {
 ${alerting}
 <section class="section"><h2>${escapeHtml(s.otherRegions)}</h2><ul class="card group">${model.others.map((r) => row(r, s.alertShort)).join("")}</ul></section>
 </form>`;
-  const toolbar = `<a class="icon-btn start" href="${pageHref("/", model.lang)}" aria-label="${escapeHtml(s.back)}">${glyph("back")}</a>`;
+  const toolbar = `<a class="icon-btn start" href="${pageHref("/", model.lang, model.linkRegion)}" aria-label="${escapeHtml(s.back)}">${glyph("back")}</a>`;
   return documentShell({
     lang: model.lang,
     title: `${s.regions} · Drive Check`,
     accent: model.current.accent,
     path: "/regions",
+    linkRegion: model.linkRegion,
     toolbar,
     main,
   });

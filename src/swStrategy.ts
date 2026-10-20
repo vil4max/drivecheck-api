@@ -55,16 +55,34 @@ function markedOffline(response: Response): Response {
   return new Response(response.body, { status: response.status, headers });
 }
 
+const PAGES: readonly string[] = ["/", "/regions"];
+
+/**
+ * Saves the page of a visit the worker did not control yet (it registers from that very page),
+ * so the app opens offline after one online visit (REQ-WEB-008).
+ */
+export async function seedPage(
+  deps: Pick<SwDeps, "open">,
+  path: string,
+  html: string,
+): Promise<void> {
+  if (!PAGES.includes(path)) return;
+  const response = new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  await (await deps.open(DATA_CACHE)).put(path, response);
+}
+
 async function networkFirst(request: Request, key: string, deps: SwDeps): Promise<Response> {
   const cache = await deps.open(DATA_CACHE);
+  // A shared ?region= link shows someone else's region; it must not become the offline page.
+  const keep = !(PAGES.includes(key) && new URL(request.url).searchParams.has("region"));
   try {
     const response = await deps.fetch(request);
-    if (response.ok) await cache.put(key, response.clone());
+    if (response.ok && keep) await cache.put(key, response.clone());
     return response;
   } catch {
     const saved = await cache.match(key);
     if (saved !== undefined) return markedOffline(saved);
-    if (key === "/" || key === "/regions") {
+    if (PAGES.includes(key)) {
       const page = await (await deps.open(staticCache(deps.version))).match("/offline.html");
       if (page !== undefined) return page;
     }

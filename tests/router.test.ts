@@ -261,3 +261,51 @@ describe("region choice", () => {
     expect(unknown.headers.get("set-cookie")).toBeNull();
   });
 });
+
+describe("review repairs", () => {
+  const post = (headers: Record<string, string>) =>
+    route({
+      request: new Request("https://drivecheck.example/region", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
+        body: "region=lviv",
+      }),
+      regionCode: null,
+      getView: async () => ({ snapshot: snapshotWith([]), rateLimitedUntil: null }),
+      getMap: async () => null,
+      clock: () => T0,
+    });
+
+  test("REQ-WEB-004 another site cannot choose the visitor's region", async () => {
+    for (const headers of [
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example" },
+    ]) {
+      const res = await post(headers);
+      expect(res.status).toBe(403);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    const own = await post({
+      "sec-fetch-site": "same-origin",
+      origin: "https://drivecheck.example",
+    });
+    expect(own.status).toBe(303);
+  });
+
+  test("REQ-WEB-006 the page allows its own origin only and cannot be framed", async () => {
+    const res = await call({ path: "/?lang=en" });
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    );
+    const regions = await call({ path: "/regions?lang=en" });
+    expect(regions.headers.get("content-security-policy")).toContain("connect-src 'self'");
+  });
+
+  test("REQ-WEB-004 a ?region= page keeps the region in its links", async () => {
+    const html = await (await call({ path: "/?region=kharkiv&lang=en" })).text();
+    expect(html).toContain('href="/?region=kharkiv&amp;lang=uk"');
+    const plain = await (await call({ path: "/?region=nowhere&lang=en" })).text();
+    expect(plain).not.toContain("region=nowhere");
+  });
+});

@@ -20,7 +20,9 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
 }
 
-export const pageHref = (path: string, lang: Lang) => `${path}?lang=${lang}`;
+/** A link to one of the pages, keeping a `?region=` the page was opened with (REQ-WEB-004). */
+export const pageHref = (path: string, lang: Lang, region: string | null) =>
+  region === null ? `${path}?lang=${lang}` : `${path}?region=${region}&amp;lang=${lang}`;
 
 /** The document every page shares: head, toolbar slot, footer and the enhancing script. */
 export function documentShell(opts: {
@@ -28,6 +30,7 @@ export function documentShell(opts: {
   title: string;
   accent: Accent;
   path: string;
+  linkRegion: string | null;
   toolbar: string;
   main: string;
   /** Data the enhancing script starts from, so opening the page adds no request. */
@@ -37,7 +40,7 @@ export function documentShell(opts: {
   const languages = LANGS.filter((l) => l !== opts.lang)
     .map(
       (l) =>
-        `<a href="${pageHref(opts.path, l)}" hreflang="${l}" lang="${l}">${escapeHtml(STRINGS[l].languageName)}</a>`,
+        `<a href="${pageHref(opts.path, l, opts.linkRegion)}" hreflang="${l}" lang="${l}">${escapeHtml(STRINGS[l].languageName)}</a>`,
     )
     .join("");
   return `<!doctype html>
@@ -87,7 +90,7 @@ export function renderPage(
     model.mapCaption === null
       ? ""
       : `<span class="caption" id="map-caption">${escapeHtml(model.mapCaption)}</span>`;
-  const toolbar = `<a class="icon-btn end" href="${pageHref("/", model.lang)}" id="refresh" aria-label="${escapeHtml(s.refresh)}">${glyph("refresh")}</a>`;
+  const toolbar = `<a class="icon-btn end" href="${pageHref("/", model.lang, model.linkRegion)}" id="refresh" aria-label="${escapeHtml(s.refresh)}">${glyph("refresh")}</a>`;
   const main = `<section class="hero" id="hero" data-region="${model.regionId}">
 ${heroGraphic(model.symbol)}
 <h1 id="status" aria-live="polite">${escapeHtml(model.title)}</h1>
@@ -95,10 +98,10 @@ ${heroGraphic(model.symbol)}
 <p class="meta" id="meta">${escapeHtml(model.meta)}</p>
 </section>
 ${nearby}
-<a href="${pageHref("/regions", model.lang)}" class="card map" id="map" aria-label="${escapeHtml(model.mapLabel)}" aria-describedby="map-hint">
-<span class="image" style="background-image:url(/v1/map)"></span>
+<a href="${pageHref("/regions", model.lang, model.linkRegion)}" class="card map${model.mapMissing ? " no-image" : ""}" id="map" aria-label="${escapeHtml(model.mapLabel)}" aria-describedby="map-hint">
 ${caption}
 <span class="failed">${glyph("offline")}<span>${escapeHtml(s.mapError)}</span></span>
+<span class="image" style="background-image:url(/v1/map)"></span>
 <span class="sr-only" id="map-hint">${escapeHtml(s.opensRegions)}</span>
 </a>`;
   return documentShell({
@@ -106,6 +109,7 @@ ${caption}
     title: model.documentTitle,
     accent: model.accent,
     path: "/",
+    linkRegion: model.linkRegion,
     toolbar,
     main,
     ...(state === undefined ? {} : { data: JSON.stringify(state) }),

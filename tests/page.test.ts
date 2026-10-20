@@ -3,7 +3,7 @@ import { STRINGS } from "../src/i18n";
 import { renderPage } from "../src/page";
 import { type Lang, regionById } from "../src/regions";
 import { renderRegions } from "../src/regionsPage";
-import { contrastRatio, over, PALETTE, STYLESHEET, SURFACE } from "../src/theme";
+import { ACCENT, contrastRatio, over, PALETTE, STYLESHEET, SURFACE } from "../src/theme";
 import { regionsModel, statusModel } from "../src/view";
 import { snapshotWith, T0 } from "./support";
 
@@ -193,5 +193,43 @@ describe("Regions page", () => {
     expect(page).toContain('<input type="hidden" name="lang" value="en">');
     expect(page.match(/<button[^>]+name="region" value="[a-z-]+"/g)).toHaveLength(25);
     expect(page).toContain('value="lviv" aria-current="true"');
+  });
+});
+
+describe("review repairs", () => {
+  test("REQ-WEB-004 a ?region= link survives Refresh, the language links and the map", () => {
+    const m = statusModel(snapshotWith([]), region("kharkiv"), "en", T0, null, "kharkiv");
+    const page = renderPage(m);
+    expect(page).toContain('id="refresh"');
+    expect(page).toMatch(/class="icon-btn end" href="\/\?region=kharkiv&amp;lang=en"/);
+    expect(page).toContain('href="/?region=kharkiv&amp;lang=uk"');
+    expect(page).toContain('href="/regions?region=kharkiv&amp;lang=en"');
+    const regions = renderRegions(
+      regionsModel(snapshotWith([]), region("kharkiv"), "en", "kharkiv"),
+    );
+    expect(regions).toMatch(/class="icon-btn start" href="\/\?region=kharkiv&amp;lang=en"/);
+    expect(regions).toContain('href="/regions?region=kharkiv&amp;lang=ru"');
+    // Without a link region, links carry only the language.
+    expect(renderPage(model([]))).toContain('href="/?lang=uk"');
+  });
+
+  test("REQ-WEB-012 without scripts, a missing map says it could not load", () => {
+    const none = statusModel(snapshotWith([]), region("kyiv-city"), "en", T0, null);
+    expect(renderPage(none)).toMatch(/class="card map no-image"/);
+    expect(renderPage(none)).toContain("Couldn&#39;t load the map.");
+    expect(renderPage(model([]))).toContain('class="card map" id="map"');
+    expect(STYLESHEET).toContain(".map.no-image .failed,.map.is-failed .failed{display:flex}");
+  });
+
+  test("REQ-WEB-011 REQ-SURF-010 the accents are the iOS colours", () => {
+    expect(ACCENT).toEqual({
+      clear: "#7CC39B",
+      alert: "#F07C7C",
+      caution: "#E8BA62",
+      stale: "#C6CAD0",
+      unavailable: "#9AA0A8",
+    });
+    expect(STYLESHEET).toContain(".accent-caution{--accent:#E8BA62");
+    expect(STYLESHEET).toContain(".accent-alert{--accent:#F07C7C");
   });
 });

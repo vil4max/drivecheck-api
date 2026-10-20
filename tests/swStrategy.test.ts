@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { OFFLINE_HEADER } from "../src/client/refresh";
-import { activate, handle, install, PRECACHE, type SwDeps } from "../src/swStrategy";
+import { activate, handle, install, PRECACHE, type SwDeps, seedPage } from "../src/swStrategy";
 import { VERSION } from "../src/version";
 
 const ORIGIN = "https://drivecheck.example";
@@ -125,6 +125,27 @@ describe("service worker strategy", () => {
     await handle(page("/"), world.deps("0.2.0"));
     await activate(world.deps("0.2.0"));
     expect([...world.caches.keys()].sort()).toEqual(["data", "static-0.2.0"]);
+  });
+
+  test("REQ-WEB-008 the page of the first, uncontrolled visit is saved for offline", async () => {
+    const world = new World();
+    await seedPage(world.deps(), "/", "<html>first visit</html>");
+    await seedPage(world.deps(), "/v1/alerts", "not a page");
+    expect(world.entries("data")).toEqual(["/"]);
+    world.network = offline;
+    const res = await handle(page("/"), world.deps());
+    expect(await res.text()).toBe("<html>first visit</html>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  test("REQ-WEB-008 a shared ?region= link does not replace the visitor's own saved page", async () => {
+    const world = new World();
+    world.network = async () => new Response("my region");
+    await handle(page("/?lang=en"), world.deps());
+    world.network = async () => new Response("odesa");
+    await handle(page("/?region=odesa&lang=en"), world.deps());
+    world.network = offline;
+    expect(await (await handle(page("/"), world.deps())).text()).toBe("my region");
   });
 
   test("REQ-WEB-008 the cache version is the package version", () => {

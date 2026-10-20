@@ -47,6 +47,8 @@ export class RefreshLoop {
   private pollTimer: TimerHandle | null = null;
   private staleTimer: TimerHandle | null = null;
   private inFlight: Promise<void> | null = null;
+  /** No attempt has run since the page opened. */
+  private firstPending = true;
 
   constructor(
     private readonly deps: RefreshDeps,
@@ -60,20 +62,6 @@ export class RefreshLoop {
   start(visible: boolean): void {
     this.visible = visible;
     this.armStale();
-    const now = this.deps.now();
-    const old = this.snapshot === null || now - checkedAt(this.snapshot) > STALE_AFTER_MS;
-    if (visible && old) {
-      // After an idle spell the Worker serves its old answer and refreshes in the background;
-      // like the first fetch of an iOS session, ask again as soon as the floor allows.
-      this.pollTimer = this.deps.setTimer(
-        () => {
-          this.pollTimer = null;
-          void this.trigger();
-        },
-        FLOOR_MS - (now - this.lastSuccessAt),
-      );
-      return;
-    }
     this.schedulePoll();
   }
 
@@ -109,6 +97,7 @@ export class RefreshLoop {
     this.clearPoll();
     this.inFlight = this.run().finally(() => {
       this.inFlight = null;
+      this.firstPending = false;
       this.schedulePoll();
     });
     return this.inFlight;
@@ -166,7 +155,12 @@ export class RefreshLoop {
     this.clearPoll();
     if (!this.visible || this.inFlight !== null) return;
     const now = this.deps.now();
-    const at = Math.max(now + this.interval(), this.holdUntil ?? 0);
+    // After an idle spell the Worker serves its old answer and refreshes in the background; like
+    // the first fetch of an iOS session, a page that opened with old or no data asks again as
+    // soon as the floor allows, until its first attempt.
+    const old = this.snapshot === null || now - checkedAt(this.snapshot) > STALE_AFTER_MS;
+    const delay = this.firstPending && old ? this.lastSuccessAt + FLOOR_MS - now : this.interval();
+    const at = Math.max(now + delay, this.holdUntil ?? 0);
     this.pollTimer = this.deps.setTimer(() => {
       this.pollTimer = null;
       void this.trigger();

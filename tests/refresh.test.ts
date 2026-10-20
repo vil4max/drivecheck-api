@@ -136,6 +136,19 @@ describe("RefreshLoop", () => {
     expect(empty.requestTimes).toEqual([T0 + 10_000]);
   });
 
+  test("REQ-REFRESH-001 a stale page opened hidden still asks when the floor ends, not a minute later", async () => {
+    const world = new World();
+    world.now = T0 + 300_000;
+    const loop = started(world, false);
+    await world.advance(3_000);
+    loop.setVisible(true);
+    await flush();
+    expect(world.paths).toEqual([]); // inside the floor
+    world.answers.push(world.ok());
+    await world.advance(7_000);
+    expect(world.requestTimes).toEqual([T0 + 310_000]);
+  });
+
   test("REQ-REFRESH-002 60 s ± 10 % when quiet, 30 s in alarm, 300 s with data saver", async () => {
     const world = new World();
     world.random = 1;

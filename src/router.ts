@@ -40,6 +40,16 @@ function pickRegion(
 
 /** `POST /region` from the Regions page without JavaScript: remember, then show Status. */
 async function chooseRegion(request: Request): Promise<Response> {
+  // Only the visitor, from this site, picks their region: SameSite=Lax still lets another site
+  // post a top-level form here, so cross-site posts are refused.
+  const site = request.headers.get("sec-fetch-site");
+  const origin = request.headers.get("origin");
+  if (
+    (site !== null && site !== "same-origin") ||
+    (origin !== null && origin !== new URL(request.url).origin)
+  ) {
+    return new Response("Forbidden", { status: 403 });
+  }
   const form = new URLSearchParams(await request.text());
   const region = regionById(form.get("region") ?? "");
   if (region === undefined) return new Response("Unknown region", { status: 400 });
@@ -102,10 +112,11 @@ export async function route({
     regionCode,
   );
   const mapFetchedAt = view.mapFetchedAt ?? null;
+  const linkRegion = regionById(url.searchParams.get("region") ?? "")?.id ?? null;
   const html =
     url.pathname === "/regions"
-      ? renderRegions(regionsModel(view.snapshot, region, lang))
-      : renderPage(statusModel(view.snapshot, region, lang, now, mapFetchedAt), {
+      ? renderRegions(regionsModel(view.snapshot, region, lang, linkRegion))
+      : renderPage(statusModel(view.snapshot, region, lang, now, mapFetchedAt, linkRegion), {
           snapshot: view.snapshot,
           mapFetchedAt,
         });
@@ -133,4 +144,5 @@ export const PAGE_CSP = [
   "manifest-src 'self'",
   "base-uri 'none'",
   "form-action 'self'",
+  "frame-ancestors 'none'",
 ].join("; ");

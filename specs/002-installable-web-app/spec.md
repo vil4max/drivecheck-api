@@ -376,3 +376,15 @@ browser caches `/v1/map` for 60 s (`Cache-Control: public, max-age=60`).
 - O7, 2026-10-20: the yellow "Stay Alert" status is in scope, as in iOS («Да, как в iOS»).
 - O8, 2026-10-20: Status and Regions in this slice; Details later; no Pro crown
   («Status + Regions»).
+- O9, open: refinements written during implementation, after the plan approval, from evidence in
+  the browser and the independent review. They wait for the owner's confirmation in the PR:
+  1. REQ-WEB-012: a map request waits 3 s after a JSON request and a JSON request keeps 1 s clear
+     of a map request (the provider answered 429 to a map request sent 0.3 s after the JSON one);
+     without scripts, a card with no held map says "Couldn't load the map.".
+  2. REQ-REFRESH-001: a page that opens with stale or no data asks as soon as the 10 s floor
+     allows, before its regular interval.
+  3. REQ-WEB-004: links on a page opened with `?region=` keep it; the Regions form keeps the
+     language; `POST /region` refuses cross-site posts, and the page refuses framing.
+  4. REQ-WEB-008: the page of the first visit, which the service worker cannot see, is saved by
+     the page itself; a page opened by a shared `?region=` link is never saved as the offline
+     page.
