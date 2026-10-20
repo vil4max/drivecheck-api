@@ -74,8 +74,8 @@ New:
 - `public/manifest.webmanifest`, `public/icons/*` (from the iOS AppIcon via `sips`),
   `public/_headers`; `scripts/app-assets.mjs` (writes `public/app/assets.json`);
   `tsconfig.client.json`, `tsconfig.sw.json`; `tests/node.d.ts`.
-- `docs/screenshots/`: phone (375 px) Status alarm after idle, Stay Alert (en, uk), quiet, stale,
-  Regions and offline (uk); desktop (1440 px) Status alarm and Regions (uk).
+- `docs/screenshots/`: Status in alarm and calm, Regions and the offline page, each on a phone
+  (375 px) and a desktop (1440 px), taken on `wrangler dev` with the live feed.
 
 Existing test expectations changed because the spec changes them: in `tests/router.test.ts`, the
 stale wording ("Last known: … · HH:mm" replaces "Last known · Updated"), the removed no-`<script>`
