@@ -195,7 +195,7 @@ Then the nearby-alerts line lists them, using the iOS neighbour table; with none
 
 ### REQ-API-001 — Versioned mirror endpoint
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Given a client asks `GET /v1/alerts`\
 When a snapshot is held\
@@ -209,7 +209,7 @@ fields let it judge staleness without trusting its own clock alone.
 
 ### REQ-API-002 — No snapshot, no fake status
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Given no snapshot is held\
 When the upstream fails, has not answered within 5 s, or a 429 window is open\
@@ -218,7 +218,7 @@ when a window is open, and the page shows "Unavailable" with HTTP 503
 
 ### REQ-API-003 — No history and no personal data
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Given the coordinator stores state\
 When it saves a snapshot or a rate-limit window\
@@ -229,7 +229,7 @@ Reason: core "Never" forbids alert history and analytics; a public proof must sh
 
 ### REQ-WEB-001 — Language
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Given a page request\
 When `?lang=` names `en`, `uk` or `ru`, or else `Accept-Language` prefers one of them\
@@ -238,7 +238,7 @@ other two languages
 
 ### REQ-WEB-002 — Current region
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Amended 2026-10-20 by spec 002: REQ-WEB-004 puts the visitor's region cookie between `?region=` and the network region, and supersedes the sentence about no region picker.
 
@@ -255,7 +255,7 @@ checks; the page offers no region picker, as the apps offer none since 2026-09-2
 
 ### REQ-WEB-003 — Accessible glanceable status
 
-Status: approved (owner, 2026-10-18, «а»; see "Owner decisions")
+Status: approved (owner, 2026-10-18,; see "Owner decisions")
 
 Amended 2026-10-20 by spec 002: REQ-WEB-005 lets the page load an external enhancing script; it still needs none, and no inline script runs.
 
@@ -309,7 +309,7 @@ owner's deploy, pinned in the lockfile. Every version was published before 2026-
 
 ## Owner decisions
 
-On 2026-10-18 the owner answered «а» (relayed by the orchestrator). The question offered A, the
+On 2026-10-18 the owner chose option A. The question offered A, the
 visitor's region from Cloudflare's IP region, else Kyiv city; or B, always Kyiv city. It also said
 the six slice 1 requirements count as approved together with the answer.
 
@@ -317,7 +317,7 @@ the six slice 1 requirements count as approved together with the answer.
   written.
 - O2, decided 2026-10-18 (A): REQ-WEB-002 uses the visitor's network region. The region is neither
   stored nor logged, and an unknown or non-Ukrainian region falls back to Kyiv city.
-- O3, done 2026-10-18: the owner approved the deploy in this session and signed in to Cloudflare
-  himself. Wrangler 4.147.0 deployed `main` at 468ae3c to https://drivecheck-api.vil4max.workers.dev
+- O3, done 2026-10-18: the owner approved the deploy and ran it from the owner's Cloudflare account
+  from the owner's account. Wrangler 4.147.0 deployed `main` at 468ae3c to https://drivecheck-api.vil4max.workers.dev
   (version ee9dcce7). Smoke test: `/v1/alerts` answers 200 with 26 states and freshness, `/` renders
   in en, uk and ru, an unknown path answers 404, and three calls inside 10 s share one `fetchedAt`.

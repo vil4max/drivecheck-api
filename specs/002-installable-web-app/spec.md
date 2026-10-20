@@ -4,9 +4,8 @@ Feature: `002-installable-web-app` · Created: 2026-10-20
 Status: approved by the owner on 2026-10-20 with the revised plan (`plan.md`), after resuming the
 slice with the iOS design and the alert map in scope (O5). Shared requirements keep the status the
 owner gave them in `regional-check` or in slice 1.
-Input: the owner's decisions PD-107 (Drive Check is the multiplatform testbed of his agentic loops)
-and PD-108, option A (an installable web app served by the same Worker), and his answers of
-2026-10-20 (see "Owner decisions").
+Input: the owner's decision PD-108, option A (an installable web app served by the same Worker),
+and the owner decisions of 2026-10-20 (see "Owner decisions").
 
 ## Summary
 
@@ -365,17 +364,16 @@ browser caches `/v1/map` for 60 s (`Cache-Control: public, max-age=60`).
 
 ## Owner decisions
 
-- O1, 2026-10-20: PD-107 and PD-108 option A, as relayed in this session's brief: an installable web
+- O1, 2026-10-20: PD-108 option A: an installable web
   app on the same Worker with region choice, auto-refresh and installation; the region stored only
   in the browser; the no-JS page stays the fallback; refresh only through `/v1/alerts`.
 - O2, 2026-10-20: the region choice is kept in a cookie.
 - O3, 2026-10-20: the client is compiled by `tsc`, no new dependency.
 - O4, 2026-10-20: browser-level checks are a recorded manual smoke.
 - O5, 2026-10-20: after parking, the owner resumed slice 2 with the iOS design as the reference
-  and the alert map; relayed by the orchestrator the same day, visual quality, responsive layout,
+  and the alert map; visual quality, responsive layout,
   accessibility, a measured first paint and screenshots in the PR are acceptance criteria.
-- O6, 2026-10-20: dark theme only, as the apps; this overrides the orchestrator's request for a
-  light theme.
+- O6, 2026-10-20: dark theme only, as the apps.
 - O7, 2026-10-20: the yellow "Stay Alert" status is in scope, as in iOS.
 - O8, 2026-10-20: Status and Regions in this slice; Details later; no Pro crown.
 - O9, open: refinements written during implementation, after the plan approval, from evidence in
