@@ -1,8 +1,8 @@
 # Feature specification: all-clear push (server)
 
 Feature: `003-allclear-push` · Created: 2026-11-09
-Status: draft; the requirements below are `proposed` until the owner approves the plan
-([plan.md](plan.md)), as spec 001's were (its O1).
+Status: approved by the owner on 2026-11-09 with the plan ([plan.md](plan.md), Points to decide),
+as spec 001's requirements were (its O1).
 App side: `regional-check`, spec `specs/ALLCLEAR-push/` and `docs/requirements/push.md`
 (REQ-PUSH-001 to REQ-PUSH-007), branch `claude/allclear-push`. That spec and its plan are the source
 of the API contract below.
@@ -54,7 +54,7 @@ Numbered as in the app's spec (`regional-check` `specs/ALLCLEAR-push/spec.md`), 
 
 ### REQ-PUSH-002 — The server pushes only on a confirmed change
 
-Status: proposed (shared with the app; enforced and tested here)
+Status: approved (owner, 2026-11-09; shared with the app, enforced and tested here)
 
 Given the feed is fresh and a region's previous confirmed status was an alarm seen at most 10
 minutes earlier\
@@ -64,7 +64,7 @@ cold start or a longer gap sends nothing (REQ-SURF-009)
 
 ### REQ-PUSHAPI-001 — Registration endpoint
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given a request to `/v1/push/registration`\
 When it is a `PUT` with exactly the four valid fields, or a `DELETE` with a token\
@@ -73,7 +73,7 @@ a missing, extra or invalid field answers 400 and stores nothing; the response o
 
 ### REQ-PUSHAPI-002 — Only five fields, 60 days
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given the server keeps a device\
 When it stores or logs anything about it\
@@ -82,7 +82,7 @@ refreshed for 60 days is deleted, and no log line contains a token
 
 ### REQ-PUSHAPI-003 — Polling only while needed
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given at least one device is registered\
 When the Durable Object alarm fires\
@@ -91,7 +91,7 @@ or 429 window, and it stops re-arming once no device is registered
 
 ### REQ-PUSHAPI-004 — Batches within the Free plan
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given a change to send\
 When an invocation sends pushes\
@@ -100,7 +100,7 @@ rest
 
 ### REQ-PUSHAPI-005 — APNs answers
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given APNs answers a push\
 When the status is 410, or 400 with `BadDeviceToken` or `DeviceTokenNotForTopic`\
@@ -108,7 +108,7 @@ Then the device record is deleted; other answers delete nothing, and no push is 
 
 ### REQ-PUSHAPI-006 — The all-clear text and its lifetime
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given an all-clear push for a region\
 When it is built\
@@ -120,7 +120,7 @@ is deleted unsent
 
 ### REQ-PUSHAPI-007 — Bounded registry and alarm
 
-Status: proposed
+Status: approved (owner, 2026-11-09)
 
 Given the registry holds 10,000 devices, or a feed refresh hangs\
 When a new token is registered, or the alarm has waited 20 s for the feed\

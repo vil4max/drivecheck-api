@@ -216,7 +216,7 @@ Other risks:
 - [x] T008 Implement: `src/push/apns.ts`, `src/push/sender.ts`, `src/push/text.ts`, secrets in `Env`, `APNS_TOPIC` in `wrangler.jsonc`.
 
 ## Group 4: Docs and approval of requirements
-- [ ] T009 Docs: requirement statuses to approved; README endpoint list, "Polite" (30 s alarm), "Deploy" (the four `wrangler secret put` lines, never values). Files: `specs/003-allclear-push/spec.md`, `README.md`
+- [x] T009 Docs: requirement statuses to approved; README endpoint list, "Polite" (30 s alarm), "Deploy" (the four `wrangler secret put` lines, never values). Files: `specs/003-allclear-push/spec.md`, `README.md`
 
 Deploy and an end-to-end send to a TestFlight device follow the owner's separate approval; the app
 PR #25 merges only after the server is deployed.
