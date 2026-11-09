@@ -6,6 +6,7 @@ import {
   type MapState,
   type StoredState,
 } from "./coordinator.ts";
+import { type AlarmState, alarmAfterRegistration, runAlarm } from "./push/alarm.ts";
 import { type Registration, register } from "./push/registration.ts";
 import { PushStore, type SqlRunner } from "./push/registry.ts";
 import { route, ukrainianRegionCode } from "./router.ts";
@@ -22,11 +23,13 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
   private readonly coordinator: FeedCoordinator;
   /** The all-clear push registry (spec 003), in this object's SQLite. */
   private readonly push: PushStore;
+  private readonly alarmState: AlarmState = { lastPollAt: null };
+  private readonly sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.push = new PushStore(sqlRunner(ctx.storage));
-    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const sleep = this.sleep;
     this.coordinator = new FeedCoordinator({
       fetch: (url, init) => fetch(url, init),
       now: () => Date.now(),
@@ -55,12 +58,32 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
     return this.coordinator.currentMap();
   }
 
-  registerDevice(registration: Registration): 204 | 503 {
-    return register(this.push, registration, Date.now());
+  async registerDevice(registration: Registration): Promise<204 | 503> {
+    const status = register(this.push, registration, Date.now());
+    if (status === 204) {
+      const next = alarmAfterRegistration(await this.ctx.storage.getAlarm(), Date.now());
+      if (next !== null) await this.ctx.storage.setAlarm(next);
+    }
+    return status;
   }
 
   forgetDevice(token: string): void {
     this.push.deleteDevice(token);
+  }
+
+  /** The all-clear loop (spec 003): poll, detect, send, then schedule the next round or stop. */
+  async alarm(): Promise<void> {
+    const next = await runAlarm(
+      {
+        store: this.push,
+        refresh: () => this.coordinator.refresh(),
+        deadline: this.sleep,
+        now: () => Date.now(),
+        log: (message) => console.log(message),
+      },
+      this.alarmState,
+    );
+    if (next !== null) await this.ctx.storage.setAlarm(next);
   }
 }
 

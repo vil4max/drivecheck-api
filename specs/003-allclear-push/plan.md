@@ -208,8 +208,8 @@ Other risks:
 - [x] T004 Implement: `src/push/registration.ts`, `src/push/registry.ts`, router path, `worker.ts` RPCs and SQL adapter.
 
 ## Group 2: Change detection and the alarm
-- [ ] T005 Test: the four `REQ-PUSH-002` tests and `REQ-PUSHAPI-003` prove AC-1, AC-2, AC-8. Files: `tests/pushChanges.test.ts`, `tests/coordinator.test.ts`
-- [ ] T006 Implement: `src/push/changes.ts`, `FeedCoordinator.refresh()`, `alarm()` arming and re-arming.
+- [x] T005 Test: the four `REQ-PUSH-002` tests and `REQ-PUSHAPI-003` prove AC-1, AC-2, AC-8. Files: `tests/pushChanges.test.ts`, `tests/coordinator.test.ts`
+- [x] T006 Implement: `src/push/changes.ts`, `FeedCoordinator.refresh()`, `alarm()` arming and re-arming.
 
 ## Group 3: Sender
 - [ ] T007 Test: `REQ-PUSHAPI-004`, `REQ-PUSHAPI-005` (answers, provider token), `REQ-PUSHAPI-002` (fields, 60 days, logs), the text test prove AC-4, AC-5, AC-6, AC-7. Files: `tests/pushSender.test.ts`, `tests/apns.test.ts`
