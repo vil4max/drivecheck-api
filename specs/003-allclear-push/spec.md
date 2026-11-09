@@ -104,8 +104,28 @@ Status: proposed
 
 Given APNs answers a push\
 When the status is 410, or 400 with `BadDeviceToken` or `DeviceTokenNotForTopic`\
-Then the device record is deleted; other answers delete nothing (whether a 429 or 5xx push is
-retried is open: plan, Points to decide)
+Then the device record is deleted; other answers delete nothing, and no push is retried
+
+### REQ-PUSHAPI-006 — The all-clear text and its lifetime
+
+Status: proposed
+
+Given an all-clear push for a region\
+When it is built\
+Then its title and body are, in the device's language, with the region's name in that language:
+en "All clear: {region}" / "The air alert has ended."; uk "Відбій тривоги: {region}" /
+"Повітряна тривога закінчилась."; ru "Отбой тревоги: {region}" / "Воздушная тревога окончена.";
+it expires 5 minutes after it is sent (`apns-expiration`), and a queued push older than 5 minutes
+is deleted unsent
+
+### REQ-PUSHAPI-007 — Bounded registry and alarm
+
+Status: proposed
+
+Given the registry holds 10,000 devices, or a feed refresh hangs\
+When a new token is registered, or the alarm has waited 20 s for the feed\
+Then the registration answers 503 and stores nothing (a known token still refreshes), and the
+alarm processes nothing and re-arms
 
 ## Out of scope
 
@@ -119,3 +139,9 @@ An alert-start push, other threat types, Live Activity updates, neighbouring reg
   env, lang, last-seen; the fallback region is never registered (enforced by the app, REQ-PUSH-004);
   30 s polling; 60-day expiry; storing the device token and region is approved, which amends the
   README "Never" rule and REQ-API-003 (spec 001).
+- 2026-11-09 (owner, at the plan gate): the host stays `https://drivecheck.vil4max.com`; one APNs
+  key enabled for both environments; topic `vil4max.RegionalCheck`; the push texts of
+  REQ-PUSHAPI-006; no retry, a 5-minute push lifetime and outbox; the alarm waits at most 20 s for
+  the feed; the region statuses are one overwritten record; at most 10,000 devices, 503 above; 400
+  and 405 answers and strict body validation. A dashboard rate-limiting rule on the path is
+  optional and the owner's.

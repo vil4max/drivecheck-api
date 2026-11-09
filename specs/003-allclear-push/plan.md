@@ -122,6 +122,13 @@ work, the alarm still tracks changes, nothing is sent, and one log line names th
 never a value. The JWT is cached in memory and re-signed after 40 min (inside B11's 20 to 60 min).
 Tests use a key generated at test time; no key file is committed.
 
+Changes from the plan gate (Points to decide): the region statuses are one overwritten record
+(`push-statuses` in the object's key-value storage: per region `{alert, seenAt}`, plus the last
+processed `fetchedAt`), written once per processed snapshot, not a `region_status` table; outbox
+rows carry their creation time and are deleted unsent after 5 min; pushes carry
+`apns-expiration` = send time + 5 min and are never retried; the alarm waits at most 20 s for the
+feed; at most 10,000 devices.
+
 ## Files and types
 
 - `src/push/registration.ts`: `parseRegistration(body): Registration | null`,
@@ -154,6 +161,8 @@ Tests use a key generated at test time; no key file is committed.
 | AC-7 | `REQ-PUSHAPI-001 the all-clear text exists in en, uk and ru` | every `Lang` × every region gives a non-empty title and body naming the region in that language; payload ≤ 4096 bytes |
 | AC-8 | `REQ-PUSHAPI-003 the alarm polls every 30 s only while devices exist` | first PUT arms the alarm; alarm with devices → one `refresh()` and re-arm at +30 s; an alarm 5 s after a client-triggered attempt → no upstream call (floor); last DELETE → no re-arm |
 | — | `REQ-API-003 stores one record holding only the latest snapshot and no client data` (existing) | unchanged; still passes, since the device tables are a separate store |
+| AC-7 | `REQ-PUSHAPI-006 the texts and the 5-minute lifetime` | uk Kharkiv → title "Відбій тривоги: Харківська область"; en Kyiv city → "All clear: Kyiv"; `apns-expiration` = send second + 300; an outbox row 300 001 ms old → deleted unsent |
+| — | `REQ-PUSHAPI-007 the device cap and the alarm deadline` | 10,000 stored, new token → 503 and no row, known token → 204; a hanging refresh → after 20 s no processing and a re-arm at +30 s |
 | — | `REQ-PUSHAPI-005 the provider token` | header `{alg: ES256, kid}`, claims `{iss, iat}`; signature verifies with the test public key; reused at +39 min, re-signed at +40 min |
 
 ## Risks
@@ -228,22 +237,30 @@ Plan critic findings (separate pass, 2026-11-09), unchanged, each with the agent
    (Apple: retry 5xx after 15 min) is neither retried nor re-queued, and no rule says whether a late
    all-clear is still wanted. Proposed: no retry and an `apns-expiration` of now + 10 min, so a
    push that cannot arrive within the gap rule's window is never delivered late. Owner decides.
+   - Decision: accepted with a change: no retry, and `apns-expiration` is now + 5 min (owner,
+     2026-11-09).
 2. [1] plan "Change detection": a change detected while the sender is off (a secret missing, or the
    key revoked) still writes outbox rows that the next invocations send once the key exists, perhaps
    hours later. Proposed: outbox rows older than 10 min are deleted unsent. Owner decides.
+   - Decision: accepted with a change: outbox rows older than 5 min are deleted unsent (owner,
+     2026-11-09).
 3. [2] `src/coordinator.ts:96-111` and plan "How the alarm reads the feed": `refresh()` awaiting an
    attempt holds the alarm while the coordinator's transient retry sleeps 2 s and the upstream may
    take up to 15 s (`src/coordinator.ts:7-8`); plan needs the alarm's own deadline. Proposed: the
    alarm awaits at most 20 s, then processes nothing and re-arms. Fixed in the plan: no; owner
    decides.
+   - Decision: accepted (owner, 2026-11-09).
 4. [2] plan "Change detection" and Risks "Row writes": re-confirming every alerting region each poll
    rewrites its `region_status` row every 30 s; with 15 regions in alarm that is about 43,000 writes a
    day, on top of the rest, against the 100,000 Free limit. Proposed: keep the 25 statuses in one
    overwritten record (one write per processed snapshot, at most 2,880 a day). Owner decides.
+   - Decision: accepted (owner, 2026-11-09).
 5. [1] plan Risks "Abuse": no limit on registrations; a flood of PUTs can spend the 100,000 daily
    row writes and stop the coordinator saving its state. Proposed: a cap on stored devices (for
    example 10,000) answering 503 above it, and a rate-limiting rule on the path in the Cloudflare
    dashboard (owner's account; Free availability not verified here). Owner decides.
+   - Decision: accepted: a cap of 10,000 stored devices, 503 above it; the dashboard rate-limiting
+     rule is optional and left to the owner (owner, 2026-11-09).
 
 Contract check against the app (PR #25, commit f842802): `PUT /v1/push/registration` with
 `{token, region, env, lang}` and `DELETE /v1/push/registration` with `{token}`, both 204, base URL
@@ -256,17 +273,27 @@ all additions the app's contract does not state:
   token. The app treats any non-2xx as a failure and retries on the next foreground, so a 400
   would be retried forever for a body the server will never accept. Proposed: keep 400 and 405;
   the app needs no change, since its body is always valid. Owner decides.
+  - Decision: accepted (owner, 2026-11-09).
 - D2 Validation detail the app does not state: the token must be hex (the app sends lowercase hex,
   `PushRegistration.tokenString`), and a body with an extra key is refused. Owner decides.
+  - Decision: accepted (owner, 2026-11-09).
 
 Questions for the owner beyond the critic:
 
 - Q1 Host: the app calls `https://drivecheck.vil4max.com` (`PushRegistration.swift`). The custom
   domain is attached in the dashboard, not in `wrangler.jsonc` (README "Deploy"). Keep it as the
   permanent API host for released apps?
+  - Decision: yes (owner, 2026-11-09).
 - Q2 Key environments: debug builds register `sandbox`, TestFlight and App Store builds
   `production`. One key enabled for both environments, two keys (`APNS_KEY_SANDBOX` and
   `APNS_KEY`), or production only with `sandbox` registrations refused?
+  - Decision: one key enabled for both environments (owner, 2026-11-09).
 - Q3 Wording of the push (title and body) in en, uk and ru.
+  - Decision: the texts in spec 003, REQ-PUSHAPI-006 (owner, 2026-11-09).
 - Q4 `apns-topic`: the bundle id `vil4max.RegionalCheck` from the app's project file, as a plain
   `vars` value. Confirm.
+  - Decision: confirmed (owner, 2026-11-09).
+
+The 10-minute gap rule for change detection is unchanged; the 5 minutes above apply to the push's
+lifetime and the outbox only. The requirements of spec 003 become approved with Group 4 (T009),
+once tests cite them, so the requirement trace stays green after every group.
