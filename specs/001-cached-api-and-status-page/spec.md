@@ -233,6 +233,12 @@ when a window is open, and the page shows "Unavailable" with HTTP 503
 
 Status: approved (owner, 2026-10-18; see "Owner decisions")
 
+Amended 2026-11-09 by spec 003 (owner decision of that day): the coordinator's record is unchanged;
+the one exception is the all-clear push registry, which keeps, per iPhone that opted in, only the
+token, region code, APNs environment, language and last-seen time (REQ-PUSHAPI-002), plus the
+latest confirmed status per region, overwritten. Nothing is stored or logged about web visitors or
+`/v1/alerts` clients.
+
 Given the coordinator stores state\
 When it saves a snapshot or a rate-limit window\
 Then it overwrites a single record, keeps no earlier snapshot, and stores and logs nothing about

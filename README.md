@@ -40,9 +40,13 @@ Browsers never ask Ubilling.
 ## Never
 
 No alert history (only the latest answer and map are kept, each in one overwritten record), no
-accounts, no ads, no analytics, and nothing stored or logged about visitors on the server; the
-region choice and the offline copy stay in the visitor's browser. Alert data is informational only;
-do not rely on it for critical decisions.
+accounts, no ads, no analytics, and nothing stored or logged about web visitors on the server; the
+region choice and the offline copy stay in the visitor's browser. One exception, approved on
+2026-11-09 for the all-clear push ([spec 003](specs/003-allclear-push/spec.md)): for an iPhone whose
+driver switched the push on, the server keeps the push token, the region code, the APNs environment,
+the language and the time it last heard from the device, deletes them when the driver switches the
+push off or after 60 days without contact, and never logs a token. Alert data is informational
+only; do not rely on it for critical decisions.
 
 ## Develop
 
