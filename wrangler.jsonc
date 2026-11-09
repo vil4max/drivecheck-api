@@ -9,6 +9,9 @@
   // Static files first; the pages (/, /regions, /offline), POST /region and the API fall through
   // to the Worker. "none" serves files only at their exact paths.
   "assets": { "directory": "./public", "html_handling": "none" },
+  // The all-clear push (spec 003): the app's bundle id is public; APNS_KEY, APNS_KEY_ID and
+  // APNS_TEAM_ID are secrets the owner sets with `wrangler secret put`, never in this file.
+  "vars": { "APNS_TOPIC": "vil4max.RegionalCheck" },
   "durable_objects": {
     "bindings": [{ "name": "FEED", "class_name": "FeedCoordinatorObject" }]
   },

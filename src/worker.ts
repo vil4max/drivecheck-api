@@ -7,11 +7,14 @@ import {
   type StoredState,
 } from "./coordinator.ts";
 import { type AlarmState, alarmAfterRegistration, runAlarm } from "./push/alarm.ts";
+import { type ApnsEnvVars, apnsSender, credentialsFrom, ProviderToken } from "./push/apns.ts";
 import { type Registration, register } from "./push/registration.ts";
 import { PushStore, type SqlRunner } from "./push/registry.ts";
+import { sendBatch } from "./push/sender.ts";
 import { route, ukrainianRegionCode } from "./router.ts";
 
-export interface Env {
+/** `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` are secrets the owner enters with `wrangler secret put`. */
+export interface Env extends ApnsEnvVars {
   FEED: DurableObjectNamespace<FeedCoordinatorObject>;
 }
 
@@ -24,6 +27,7 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
   /** The all-clear push registry (spec 003), in this object's SQLite. */
   private readonly push: PushStore;
   private readonly alarmState: AlarmState = { lastPollAt: null };
+  private providerToken: ProviderToken | null = null;
   private readonly sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -73,17 +77,31 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
 
   /** The all-clear loop (spec 003): poll, detect, send, then schedule the next round or stop. */
   async alarm(): Promise<void> {
+    const log = (message: string) => console.log(message);
+    const send = this.sender(log);
     const next = await runAlarm(
       {
         store: this.push,
         refresh: () => this.coordinator.refresh(),
         deadline: this.sleep,
         now: () => Date.now(),
-        log: (message) => console.log(message),
+        ...(send === null ? {} : { sendBatch: () => sendBatch(this.push, send, log) }),
+        log,
       },
       this.alarmState,
     );
     if (next !== null) await this.ctx.storage.setAlarm(next);
+  }
+
+  /** The APNs sender, or null while a credential is missing; the token is cached across alarms. */
+  private sender(log: (message: string) => void) {
+    const found = credentialsFrom(this.env);
+    if ("missing" in found) {
+      if (this.push.outboxSize() > 0) log(`push disabled, missing: ${found.missing.join(", ")}`);
+      return null;
+    }
+    this.providerToken ??= new ProviderToken(found.credentials, () => Date.now());
+    return apnsSender(this.providerToken, (url, init) => fetch(url, init), log);
   }
 }
 

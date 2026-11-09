@@ -212,8 +212,8 @@ Other risks:
 - [x] T006 Implement: `src/push/changes.ts`, `FeedCoordinator.refresh()`, `alarm()` arming and re-arming.
 
 ## Group 3: Sender
-- [ ] T007 Test: `REQ-PUSHAPI-004`, `REQ-PUSHAPI-005` (answers, provider token), `REQ-PUSHAPI-002` (fields, 60 days, logs), the text test prove AC-4, AC-5, AC-6, AC-7. Files: `tests/pushSender.test.ts`, `tests/apns.test.ts`
-- [ ] T008 Implement: `src/push/apns.ts`, `src/push/sender.ts`, `src/push/text.ts`, secrets in `Env`, `APNS_TOPIC` in `wrangler.jsonc`.
+- [x] T007 Test: `REQ-PUSHAPI-004`, `REQ-PUSHAPI-005` (answers, provider token), `REQ-PUSHAPI-002` (fields, 60 days, logs), the text test prove AC-4, AC-5, AC-6, AC-7. Files: `tests/pushSender.test.ts`, `tests/apns.test.ts`
+- [x] T008 Implement: `src/push/apns.ts`, `src/push/sender.ts`, `src/push/text.ts`, secrets in `Env`, `APNS_TOPIC` in `wrangler.jsonc`.
 
 ## Group 4: Docs and approval of requirements
 - [ ] T009 Docs: requirement statuses to approved; README endpoint list, "Polite" (30 s alarm), "Deploy" (the four `wrangler secret put` lines, never values). Files: `specs/003-allclear-push/spec.md`, `README.md`
