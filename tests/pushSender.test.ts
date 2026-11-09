@@ -127,7 +127,7 @@ describe("sending all-clear pushes", () => {
 
     const counts: number[] = [];
     let before = 0;
-    while (store.outboxSize() > 0) {
+    while (store.hasOutbox()) {
       await sendBatch(store, send, () => {});
       counts.push(apns.sent.length - before);
       before = apns.sent.length;
@@ -192,7 +192,15 @@ describe("sending all-clear pushes", () => {
     );
     // One request per push: nothing is retried, and nothing is left queued.
     expect(apns.sent).toHaveLength(9);
-    expect(store.outboxSize()).toBe(0);
+    expect(store.hasOutbox()).toBe(false);
+
+    // The ExpiredProviderToken answer in the first six makes every later push carry a new token.
+    const firstToken = apns.sent.find((s) => s.url.endsWith(tokenNo(5)))!.headers.authorization;
+    store.enqueue("kharkiv", "kharkiv@2", T0);
+    await sendBatch(store, send, () => {});
+    const later = apns.sent.slice(9).map((s) => s.headers.authorization);
+    expect(later).toHaveLength(6);
+    for (const authorization of later) expect(authorization).not.toBe(firstToken);
   });
 
   test("REQ-PUSHAPI-005 the provider token", async () => {
@@ -311,7 +319,7 @@ describe("sending all-clear pushes", () => {
     };
     await runAlarm(deps, { lastPollAt: T0 + 300_000 });
     expect(late.sent).toEqual([]);
-    expect(store.outboxSize()).toBe(0);
+    expect(store.hasOutbox()).toBe(false);
   });
 
   test("REQ-PUSHAPI-002 a device keeps five fields for 60 days", async () => {

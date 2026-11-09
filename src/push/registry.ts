@@ -55,6 +55,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS push_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
 ];
 
+const DEVICE_COUNT_KEY = "deviceCount";
+
 export class PushStore {
   constructor(private readonly sql: SqlRunner) {
     for (const statement of SCHEMA) sql.run(statement);
@@ -64,8 +66,16 @@ export class PushStore {
     return this.sql.transaction(work);
   }
 
+  /**
+   * The number of devices, kept as a counter: a `COUNT(*)` would read every row on each alarm and
+   * each new registration, and rows read are a Free plan daily limit too.
+   */
   countDevices(): number {
-    return Number(this.sql.all("SELECT COUNT(*) AS n FROM push_devices")[0]?.n ?? 0);
+    return Number(this.loadState(DEVICE_COUNT_KEY) ?? 0);
+  }
+
+  private adjustDeviceCount(delta: number): void {
+    this.saveState(DEVICE_COUNT_KEY, String(Math.max(0, this.countDevices() + delta)));
   }
 
   hasDevice(token: string): boolean {
@@ -73,6 +83,7 @@ export class PushStore {
   }
 
   upsertDevice(row: DeviceRow): void {
+    const isNew = !this.hasDevice(row.token);
     this.sql.run(
       `INSERT INTO push_devices (token, region, env, lang, last_seen) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (token) DO UPDATE SET
@@ -84,21 +95,30 @@ export class PushStore {
       row.lang,
       row.lastSeen,
     );
+    if (isNew) this.adjustDeviceCount(1);
   }
 
   /** Forgets a device and every push still queued for it. */
   deleteDevice(token: string): void {
+    if (!this.hasDevice(token)) return;
     this.sql.run("DELETE FROM push_outbox WHERE token = ?", token);
     this.sql.run("DELETE FROM push_devices WHERE token = ?", token);
+    this.adjustDeviceCount(-1);
   }
 
   /** Deletes devices last heard from before `before`, and their queued pushes. */
   pruneDevices(before: number): void {
+    // An index range: it reads only the expired rows.
+    const expired = Number(
+      this.sql.all("SELECT COUNT(*) AS n FROM push_devices WHERE last_seen < ?", before)[0]?.n ?? 0,
+    );
+    if (expired === 0) return;
     this.sql.run(
       "DELETE FROM push_outbox WHERE token IN (SELECT token FROM push_devices WHERE last_seen < ?)",
       before,
     );
     this.sql.run("DELETE FROM push_devices WHERE last_seen < ?", before);
+    this.adjustDeviceCount(-expired);
   }
 
   loadState(key: string): string | null {
@@ -151,7 +171,8 @@ export class PushStore {
     this.sql.run("DELETE FROM push_outbox WHERE created_at < ?", before);
   }
 
-  outboxSize(): number {
-    return Number(this.sql.all("SELECT COUNT(*) AS n FROM push_outbox")[0]?.n ?? 0);
+  /** Whether a push is queued; reads at most one row. */
+  hasOutbox(): boolean {
+    return this.sql.all("SELECT 1 FROM push_outbox LIMIT 1").length > 0;
   }
 }

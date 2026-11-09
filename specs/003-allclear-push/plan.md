@@ -222,7 +222,18 @@ Deploy and an end-to-end send to a TestFlight device follow the owner's separate
 PR #25 merges only after the server is deployed.
 
 ## Review lows
-(filled by implement)
+
+Round 1 (2026-11-09), not fixed; the mediums of that round were repaired:
+- `src/push/sender.ts:19-23`: a batch is read once; a DELETE arriving while earlier chunks are in
+  flight removes the device, but its already-read item is still sent seconds later.
+- `src/push/apns.ts:144`: a failing `importKey` or `sign` (a malformed `APNS_KEY`) is logged as
+  "network error", so a bad key looks like an outage.
+- `src/push/apns.ts:133-143`: the APNs `fetch` has no timeout; a hanging connection holds the
+  alarm (15 min wall limit), and no poll runs meanwhile.
+- `src/worker.ts:93-101`: `this.sender()` and `setAlarm(next)` run outside `runAlarm`'s
+  catch-all; a storage error there leaves the loop unarmed until the next new PUT arms it.
+- `src/push/alarm.ts:77`: the 60-day prune runs on every alarm, not once a day as "Storage" says;
+  it reads only expired rows through the `last_seen` index, so the daily schedule was not kept.
 
 ## Verification
 

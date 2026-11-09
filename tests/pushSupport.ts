@@ -1,12 +1,20 @@
 import { DatabaseSync } from "node:sqlite";
 import { PushStore, type SqlRunner } from "../src/push/registry";
 
-/** A push store on an in-memory SQLite, with the database for direct reads in assertions. */
-export function memoryStore(): { db: DatabaseSync; store: PushStore } {
+/**
+ * A push store on an in-memory SQLite, with the database for direct reads in assertions and the
+ * statements the store ran.
+ */
+export function memoryStore(): { db: DatabaseSync; store: PushStore; queries: string[] } {
   const db = new DatabaseSync(":memory:");
+  const queries: string[] = [];
   const sql: SqlRunner = {
-    all: (query, ...params) => db.prepare(query).all(...params),
+    all: (query, ...params) => {
+      queries.push(query);
+      return db.prepare(query).all(...params);
+    },
     run: (query, ...params) => {
+      queries.push(query);
       db.prepare(query).run(...params);
     },
     transaction: (work) => {
@@ -21,7 +29,7 @@ export function memoryStore(): { db: DatabaseSync; store: PushStore } {
       }
     },
   };
-  return { db, store: new PushStore(sql) };
+  return { db, store: new PushStore(sql), queries };
 }
 
 export const TOKEN_A = "a".repeat(64);

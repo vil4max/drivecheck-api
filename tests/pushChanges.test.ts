@@ -43,7 +43,7 @@ function harness() {
       return runAlarm(deps, state);
     },
     queued: () => db.prepare("SELECT token, region FROM push_outbox ORDER BY token").all(),
-    statuses: () => db.prepare("SELECT value FROM push_state").all(),
+    statuses: () => db.prepare("SELECT value FROM push_state WHERE key = 'statuses'").all(),
   };
 }
 
@@ -97,15 +97,91 @@ describe("all-clear change detection", () => {
     await h.alarm(T0, snap([KHARKIV], T0));
     const baseline = h.statuses();
     await h.alarm(T0 + 30_000, null);
-    await h.alarm(T0 + 60_000, snap([], T0 + 60_000, 120_001), T0 + 300_000);
+    await h.alarm(T0 + 60_000, snap([], T0 + 60_000, 120_001));
     expect(h.queued()).toEqual([]);
     expect(h.statuses()).toEqual(baseline);
 
-    // The same clear snapshot seen by two alarms queues once.
-    const clear = snap([], T0 + 90_000);
-    await h.alarm(T0 + 90_000, clear);
+    // A fresh clear another caller fetched just before a 429 window opened: not judged while the
+    // window is open, then judged once it closes.
+    const clear = snap([], T0 + 80_000);
+    await h.alarm(T0 + 90_000, clear, T0 + 150_000);
+    expect(h.queued()).toEqual([]);
+    expect(h.statuses()).toEqual(baseline);
     await h.alarm(T0 + 120_000, clear);
     expect(h.queued()).toHaveLength(2);
+
+    // The same clear snapshot seen by another alarm queues nothing more.
+    await h.alarm(T0 + 150_000, clear);
+    expect(h.queued()).toHaveLength(2);
+  });
+
+  test("REQ-PUSH-002 an open 429 window keeps the alarm off the upstream", async () => {
+    const world = new FakeWorld();
+    const coordinator = new FeedCoordinator(world.deps());
+    const { store } = memoryStore();
+    store.upsertDevice({
+      token: TOKEN_A,
+      region: "kharkiv",
+      env: "production",
+      lang: "en",
+      lastSeen: T0,
+    });
+    const deps: AlarmDeps = {
+      store,
+      refresh: () => coordinator.refresh(),
+      deadline: () => new Promise<void>(() => {}),
+      now: () => world.now,
+      log: () => {},
+    };
+    const state = { lastPollAt: null };
+    world.queue(jsonResponse(feedJson(), { status: 429, headers: { "retry-after": "120" } }));
+    await runAlarm(deps, state);
+    expect(world.requests).toHaveLength(1);
+    world.now += 30_000;
+    await runAlarm(deps, state);
+    world.now += 30_000;
+    await runAlarm(deps, state);
+    expect(world.requests).toHaveLength(1);
+  });
+
+  test("REQ-PUSHAPI-004 the alarm and registrations never count every device", async () => {
+    const { db, store, queries } = memoryStore();
+    for (let n = 0; n < 5; n += 1) {
+      store.upsertDevice({
+        token: tokenNo(n),
+        region: "lviv",
+        env: "production",
+        lang: "en",
+        lastSeen: T0,
+      });
+    }
+    store.upsertDevice({
+      token: tokenNo(1),
+      region: "kharkiv",
+      env: "production",
+      lang: "en",
+      lastSeen: T0 + 1,
+    });
+    store.deleteDevice(tokenNo(2));
+    store.deleteDevice(tokenNo(99));
+    store.pruneDevices(T0 + 1);
+    const actual = () => Number(db.prepare("SELECT COUNT(*) AS n FROM push_devices").all()[0]!.n);
+    expect(actual()).toBe(1);
+    expect(store.countDevices()).toBe(1);
+
+    queries.length = 0;
+    const deps: AlarmDeps = {
+      store,
+      refresh: async () => ({ snapshot: snap([], T0 + 2), rateLimitedUntil: null }),
+      deadline: () => new Promise<void>(() => {}),
+      now: () => T0 + 2,
+      sendBatch: async () => {},
+      log: () => {},
+    };
+    await runAlarm(deps, { lastPollAt: null });
+    expect(
+      queries.filter((q) => /COUNT\(\*\)[\s\S]*FROM push_devices(?![\s\S]*WHERE)/.test(q)),
+    ).toEqual([]);
   });
 
   test("REQ-PUSH-002 a cold start sets the baseline silently", async () => {

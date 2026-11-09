@@ -97,7 +97,7 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
   private sender(log: (message: string) => void) {
     const found = credentialsFrom(this.env);
     if ("missing" in found) {
-      if (this.push.outboxSize() > 0) log(`push disabled, missing: ${found.missing.join(", ")}`);
+      if (this.push.hasOutbox()) log(`push disabled, missing: ${found.missing.join(", ")}`);
       return null;
     }
     this.providerToken ??= new ProviderToken(found.credentials, () => Date.now());

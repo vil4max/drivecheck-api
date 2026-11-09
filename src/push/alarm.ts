@@ -46,6 +46,9 @@ async function poll(deps: AlarmDeps): Promise<void> {
     deps.log("push alarm: the feed did not answer within 20 s; nothing processed");
     return;
   }
+  // AC-2: while a 429 window is open the feed counts as rate limited, even for a held snapshot
+  // another caller fetched before the window opened; it is judged once the window has closed.
+  if (view.rateLimitedUntil !== null) return;
   const { store } = deps;
   const now = deps.now();
   const { record, cleared } = detectChanges(
@@ -81,9 +84,9 @@ export async function runAlarm(deps: AlarmDeps, state: AlarmState): Promise<numb
       state.lastPollAt = now;
       await poll(deps);
     }
-    if (deps.sendBatch !== undefined && store.outboxSize() > 0) {
+    if (deps.sendBatch !== undefined && store.hasOutbox()) {
       await deps.sendBatch();
-      if (store.outboxSize() > 0) return deps.now() + SEND_REARM_MS;
+      if (store.hasOutbox()) return deps.now() + SEND_REARM_MS;
     }
     if (store.countDevices() === 0) return null;
   } catch (error) {
