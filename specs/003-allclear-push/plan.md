@@ -204,8 +204,8 @@ Other risks:
 - [ ] T002 Throwaway Worker (not committed to `main`): sign a JWT, send one alert push from `fetch` and from an alarm; record the HTTP answer, `apns-id`, and CPU time from `wrangler tail`. Decide A or B by the result.
 
 ## Group 1: Registration
-- [ ] T003 Test: `REQ-PUSHAPI-001 PUT validates the four fields`, `REQ-PUSHAPI-001 DELETE forgets the device` prove AC-3, AC-6. Files: `tests/pushRegistration.test.ts`, `tests/router.test.ts`, `tests/support.ts`
-- [ ] T004 Implement: `src/push/registration.ts`, `src/push/registry.ts`, router path, `worker.ts` RPCs and SQL adapter.
+- [x] T003 Test: `REQ-PUSHAPI-001 PUT validates the four fields`, `REQ-PUSHAPI-001 DELETE forgets the device` prove AC-3, AC-6. Files: `tests/pushRegistration.test.ts`, `tests/router.test.ts`, `tests/support.ts`
+- [x] T004 Implement: `src/push/registration.ts`, `src/push/registry.ts`, router path, `worker.ts` RPCs and SQL adapter.
 
 ## Group 2: Change detection and the alarm
 - [ ] T005 Test: the four `REQ-PUSH-002` tests and `REQ-PUSHAPI-003` prove AC-1, AC-2, AC-8. Files: `tests/pushChanges.test.ts`, `tests/coordinator.test.ts`
