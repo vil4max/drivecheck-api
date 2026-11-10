@@ -330,14 +330,20 @@ export class PushStore {
     this.sql.run(
       `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
        SELECT start_token, region, 'end', ?, 'la-end' FROM push_live_activities
-       WHERE activity_token IS NOT NULL AND region IN (${regions.map(() => "?").join(", ")})`,
+       WHERE activity_token IS NOT NULL AND region IN (${regions.map(() => "?").join(", ")})
+         AND start_token NOT IN (SELECT token FROM push_outbox WHERE kind = 'la-move')`,
       createdAt,
       ...regions,
     );
   }
 
-  /** Queues the one push that moves a running activity to its record's new region (AC-10). */
+  /**
+   * Queues the one push that moves a running activity to its record's new region (AC-10). An end
+   * still queued for the record goes: both would show the record's region at send time, so one
+   * push per record is enough.
+   */
   enqueueMove(startToken: string, region: string, createdAt: number): void {
+    this.sql.run("DELETE FROM push_outbox WHERE token = ? AND kind = 'la-end'", startToken);
     this.sql.run(
       `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
        VALUES (?, ?, 'move', ?, 'la-move')`,
@@ -348,8 +354,8 @@ export class PushStore {
   }
 
   /**
-   * The oldest queued rows, joined with their device or record. A start and an end keep the
-   * region they were queued for; a move takes the record's region at send time.
+   * The oldest queued rows, joined with their device or record. A start keeps the region it was
+   * queued for; an end and a move take the record's region at send time.
    */
   takeOutbox(limit: number): OutboxItem[] {
     return this.sql
@@ -377,7 +383,10 @@ export class PushStore {
           kind,
           key,
           token: notice || kind === "la-start" ? key : activity,
-          region: String(kind === "la-move" ? row.l_region : row.queued_region),
+          // An end or a move shows the record's region now (the driver may have moved since).
+          region: String(
+            kind === "la-move" || kind === "la-end" ? row.l_region : row.queued_region,
+          ),
           env: (notice ? row.d_env : row.l_env) as ApnsEnv,
           lang: (notice ? row.d_lang : row.l_lang) as Lang,
           createdAt: Number(row.created_at),

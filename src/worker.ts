@@ -113,6 +113,7 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
                 sendUpdates(this.push, walk, send, log, {
                   limit,
                   latest: this.alarmState.latest ?? null,
+                  now: () => Date.now(),
                 }),
             }),
         log,

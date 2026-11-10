@@ -272,7 +272,34 @@ branch merges only after the server is deployed.
 
 ## Review lows
 
-(filled by implement)
+Independent review, 2026-11-10 (spec-driven-dev code-reviewer, on the change after 6420229 up to
+the docs group): no high findings; three mediums, all test gaps, repaired with tests in
+`tests/pushEdges.test.ts`:
+- M1 the 45-send budget shared by queued events and the update walk: now tested.
+- M2 nothing sent for a rate-limited feed or a region missing from the feed: now tested for Live
+  Activity pushes.
+- M3 the migration of a spec 003 outbox: tested on the old schema with a queued row and a second
+  start. The column changes now run as numbered migrations tracked in `push_state` instead of an
+  `ALTER` that relied on a duplicate-column error, since Durable Object SQLite has no
+  `PRAGMA user_version` (Cloudflare, "Rules of Durable Objects").
+
+Lows:
+- L1 a queued `end` kept its old region after a move: repaired; an end and a move show the record's
+  region at send time, and a move replaces a pending end, so a record gets one push.
+- L2 a queued `start` was not re-checked: repaired; a start goes only to a region the last fresh
+  snapshot still shows in alarm.
+- L3 the AC-7 log assertion checked nothing: repaired; the test now sends through a refusing APNs
+  and checks every log line, and that the expired record's queued push goes with it.
+- L4 the update walk kept sending from a stale snapshot: repaired; the walk stops once the last
+  fresh snapshot is stale.
+- L5 no behavioural test goes through `src/worker.ts` (its wiring was checked by reading): not
+  fixed; the Worker runtime is not available to the unit tests. Backlog.
+- L6 the token regex was copied: repaired with the urgent-switch commit (shared helpers).
+
+The urgent switch (P10) arrived after the review and was not reviewed by it.
+
+Budget correction: Cloudflare's SQLite storage page states that every index row update counts as
+an extra row written, so option A costs the upper figure, 4 rows per queued push.
 
 ## Verification
 

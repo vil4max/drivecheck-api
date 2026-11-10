@@ -95,7 +95,11 @@ describe("the urgent switch", () => {
           now: () => clock.now,
         }),
       sendUpdates: (walk, limit) =>
-        sendUpdates(store, walk, send, () => {}, { limit, latest: state.latest ?? null }),
+        sendUpdates(store, walk, send, () => {}, {
+          limit,
+          latest: state.latest ?? null,
+          now: () => clock.now,
+        }),
       log: () => {},
     };
     const at = async (t: number, snapshot: Snapshot) => {

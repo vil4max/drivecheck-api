@@ -58,17 +58,21 @@ async function sendAll(
 }
 
 /**
- * A queued row as it will be sent, or null to drop it unsent: a Live Activity push needs the
- * feed state, an activity token cleared since queueing has nothing to reach, and a move needs a
- * fresh state of its new region (AC-10) to become a red update or the green end.
+ * A queued row as it will be sent, or null to drop it unsent. Every Live Activity push is checked
+ * against the last fresh snapshot when it is sent, not only when it was queued, so a backlog never
+ * shows a state the feed has already left: a start goes only to a region still in alarm, and an
+ * end or a move shows the state of the record's region now (AC-4, AC-10), a red update in alarm or
+ * the green end when clear. An activity token cleared since queueing has nothing to reach, and a
+ * move also needs that snapshot to be fresh.
  */
 function resolve(item: OutboxItem, latest: Snapshot | null, now: number): OutboxItem | null {
   if (item.kind === "allclear" || item.kind === "alertstart") return item;
   if (latest === null || item.token === null) return null;
-  if (item.kind !== "la-move") return { ...item, snapshot: latest };
   const apiKey = regionById(item.region)?.apiKey;
   const state = apiKey === undefined ? undefined : latest.feed.states[apiKey];
-  if (state === undefined || isStale(latest, now)) return null;
+  if (state === undefined) return null;
+  if (item.kind === "la-start") return state.alertnow ? { ...item, snapshot: latest } : null;
+  if (item.kind === "la-move" && isStale(latest, now)) return null;
   return { ...item, kind: state.alertnow ? "la-update" : "la-end", snapshot: latest };
 }
 
@@ -112,7 +116,9 @@ export async function sendUpdates(
   options: SendOptions = {},
 ): Promise<number> {
   const latest = options.latest ?? null;
-  if (latest === null) {
+  // AC-5: once the last fresh snapshot is stale, the walk stops; the activities turn stale at
+  // their stale date until a fresh poll plans the next walk.
+  if (latest === null || isStale(latest, (options.now ?? Date.now)())) {
     walk.length = 0;
     return 0;
   }

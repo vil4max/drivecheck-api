@@ -88,7 +88,11 @@ async function harness(answer: (token: string) => [number, string | null] = () =
         now: () => clock.now,
       }),
     sendUpdates: (walk, limit) =>
-      sendUpdates(store, walk, send, () => {}, { limit, latest: state.latest ?? null }),
+      sendUpdates(store, walk, send, () => {}, {
+        limit,
+        latest: state.latest ?? null,
+        now: () => clock.now,
+      }),
     log: () => {},
   };
   return {
