@@ -1,3 +1,4 @@
+import type { Snapshot } from "../feed.ts";
 import type { Lang } from "../regions.ts";
 
 export type ApnsEnv = "production" | "sandbox";
@@ -14,13 +15,23 @@ export interface DeviceRow {
 
 /** One push waiting to be sent, joined with its device's environment and language. */
 export interface OutboxItem {
+  /** The outbox row, or 0 for an update the walk builds without one. */
   id: number;
-  token: string;
+  /** What to send; a queued `la-move` is resolved to `la-update` or `la-end` before sending. */
+  kind: SendKind;
+  /** The record the row belongs to: a device token, or a Live Activity start token. */
+  key: string;
+  /** The token the push goes to; null when an activity token was cleared since queueing. */
+  token: string | null;
   region: string;
   env: ApnsEnv;
   lang: Lang;
   createdAt: number;
+  /** The feed state a Live Activity push carries. */
+  snapshot?: Snapshot;
 }
+
+export type SendKind = OutboxKind | "la-update";
 
 /**
  * The SQL the store needs. The Durable Object passes `ctx.storage.sql`, the tests an in-memory
@@ -311,23 +322,72 @@ export class PushStore {
     );
   }
 
+  /**
+   * The oldest queued rows, joined with their device or record. A start and an end keep the
+   * region they were queued for; a move takes the record's region at send time.
+   */
   takeOutbox(limit: number): OutboxItem[] {
     return this.sql
       .all(
-        `SELECT o.id, o.token, o.region, o.created_at, d.env, d.lang
-         FROM push_outbox o JOIN push_devices d ON d.token = o.token
-         WHERE o.kind = 'allclear'
+        `SELECT o.id, o.kind, o.token AS key, o.region AS queued_region, o.created_at,
+                d.env AS d_env, d.lang AS d_lang,
+                l.env AS l_env, l.lang AS l_lang, l.region AS l_region, l.activity_token
+         FROM push_outbox o
+         LEFT JOIN push_devices d
+           ON o.kind IN ('allclear', 'alertstart') AND d.token = o.token
+         LEFT JOIN push_live_activities l
+           ON o.kind IN ('la-start', 'la-end', 'la-move') AND l.start_token = o.token
+         WHERE d.token IS NOT NULL OR l.start_token IS NOT NULL
          ORDER BY o.id LIMIT ?`,
         limit,
       )
+      .map((row) => {
+        const kind = row.kind as OutboxKind;
+        const key = String(row.key);
+        const notice = NOTICE_KINDS.includes(kind);
+        const activity = row.activity_token === null ? null : String(row.activity_token);
+        return {
+          id: Number(row.id),
+          kind,
+          key,
+          token: notice || kind === "la-start" ? key : activity,
+          region: String(kind === "la-move" ? row.l_region : row.queued_region),
+          env: (notice ? row.d_env : row.l_env) as ApnsEnv,
+          lang: (notice ? row.d_lang : row.l_lang) as Lang,
+          createdAt: Number(row.created_at),
+        };
+      });
+  }
+
+  /** Up to `limit` records of `region` holding an activity token, after `after` in key order. */
+  heldLiveActivities(region: string, after: string, limit: number): LiveActivityRow[] {
+    return this.sql
+      .all(
+        `SELECT start_token, region, env, lang, activity_token, last_seen
+         FROM push_live_activities
+         WHERE region = ? AND activity_token IS NOT NULL AND start_token > ?
+         ORDER BY start_token LIMIT ?`,
+        region,
+        after,
+        limit,
+      )
       .map((row) => ({
-        id: Number(row.id),
-        token: String(row.token),
+        startToken: String(row.start_token),
         region: String(row.region),
         env: row.env as ApnsEnv,
         lang: row.lang as Lang,
-        createdAt: Number(row.created_at),
+        activityToken: String(row.activity_token),
+        lastSeen: Number(row.last_seen),
       }));
+  }
+
+  /** Forgets an activity token, unless the app has sent a newer one since. */
+  clearActivityToken(startToken: string, activityToken: string): void {
+    this.sql.run(
+      "UPDATE push_live_activities SET activity_token = NULL WHERE start_token = ? AND activity_token = ?",
+      startToken,
+      activityToken,
+    );
   }
 
   deleteOutbox(id: number): void {

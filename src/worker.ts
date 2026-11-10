@@ -11,7 +11,7 @@ import { type ApnsEnvVars, apnsSender, credentialsFrom, ProviderToken } from "./
 import { type LiveActivityRegistration, registerLiveActivity } from "./push/liveActivity.ts";
 import { type Registration, register } from "./push/registration.ts";
 import { PushStore, type SqlRunner } from "./push/registry.ts";
-import { sendBatch } from "./push/sender.ts";
+import { sendBatch, sendUpdates, type WalkEntry } from "./push/sender.ts";
 import { route, ukrainianRegionCode } from "./router.ts";
 
 /** `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` are secrets the owner enters with `wrangler secret put`. */
@@ -100,7 +100,21 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
         refresh: () => this.coordinator.refresh(),
         deadline: this.sleep,
         now: () => Date.now(),
-        ...(send === null ? {} : { sendBatch: () => sendBatch(this.push, send, log) }),
+        ...(send === null
+          ? {}
+          : {
+              sendBatch: (limit: number) =>
+                sendBatch(this.push, send, log, {
+                  limit,
+                  latest: this.alarmState.latest ?? null,
+                  now: () => Date.now(),
+                }),
+              sendUpdates: (walk: WalkEntry[], limit: number) =>
+                sendUpdates(this.push, walk, send, log, {
+                  limit,
+                  latest: this.alarmState.latest ?? null,
+                }),
+            }),
         log,
       },
       this.alarmState,

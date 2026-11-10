@@ -1,7 +1,8 @@
 import type { CoordinatorView } from "../coordinator.ts";
 import type { Snapshot } from "../feed.ts";
-import { detectChanges, parseStatusRecord } from "./changes.ts";
+import { type Changes, detectChanges, parseStatusRecord } from "./changes.ts";
 import type { PushStore } from "./registry.ts";
+import { BATCH_SIZE, type WalkEntry } from "./sender.ts";
 
 /** Feed poll interval while a device is registered (owner, 2026-11-09). */
 export const POLL_MS = 30_000;
@@ -18,17 +19,32 @@ export interface AlarmDeps {
   refresh: () => Promise<CoordinatorView>;
   deadline: (ms: number) => Promise<void>;
   now: () => number;
-  /** Sends one batch from the outbox; absent while the APNs credentials are missing. */
-  sendBatch?: () => Promise<void>;
+  /**
+   * Sends up to `limit` queued pushes and returns how many rows it took; absent while the APNs
+   * credentials are missing.
+   */
+  sendBatch?: (limit: number) => Promise<number | undefined>;
+  /** Sends up to `limit` 5-minute updates of `walk`; absent with `sendBatch`. */
+  sendUpdates?: (walk: WalkEntry[], limit: number) => Promise<number>;
   log: (message: string) => void;
 }
 
-/** Kept in the object's memory; after a restart the first alarm polls at once. */
+/**
+ * Kept in the object's memory; after a restart the first alarm polls at once, and every region
+ * in alarm is updated at once, since its last update time is gone (option B: a lost walk restarts).
+ */
 export interface AlarmState {
   lastPollAt: number | null;
   /** The last fresh snapshot processed: the state queued Live Activity pushes carry. */
   latest?: Snapshot | null;
+  /** Per region in alarm, when its Live Activities were last started or updated. */
+  updatedAt?: Record<string, number>;
+  /** Regions whose 5-minute update is being sent. */
+  walk?: WalkEntry[];
 }
+
+/** The Live Activity update interval while an alarm lasts (owner, 2026-11-10). */
+export const UPDATE_MS = 5 * 60_000;
 
 /** The first registration starts the loop; a scheduled alarm is left as it is. */
 export function alarmAfterRegistration(existing: number | null, now: number): number | null {
@@ -36,6 +52,30 @@ export function alarmAfterRegistration(existing: number | null, now: number): nu
 }
 
 const TIMED_OUT = Symbol("timed out");
+
+/**
+ * AC-3: a region in alarm is due `UPDATE_MS` after its last start or update; one just started is
+ * not. A region now clear leaves the walk: its activities get the end instead.
+ */
+function planUpdates(state: AlarmState, changes: Changes, now: number): void {
+  state.updatedAt ??= {};
+  state.walk ??= [];
+  const { updatedAt, walk } = state;
+  for (const region of changes.quiet) {
+    delete updatedAt[region];
+    const index = walk.findIndex((entry) => entry.region === region);
+    if (index >= 0) walk.splice(index, 1);
+  }
+  for (const region of changes.alarm) {
+    const last = updatedAt[region];
+    if (changes.started.includes(region)) {
+      updatedAt[region] = now;
+    } else if (last === undefined || now - last >= UPDATE_MS) {
+      updatedAt[region] = now;
+      if (!walk.some((entry) => entry.region === region)) walk.push({ region, after: "" });
+    }
+  }
+}
 
 /** Reads the feed and queues the pushes of every confirmed change and fresh state. */
 async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
@@ -75,6 +115,7 @@ async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
     store.enqueueEnds(changes.quiet, now);
   });
   state.latest = view.snapshot;
+  planUpdates(state, changes, now);
   if (cleared.length > 0) deps.log(`push alarm: all clear in ${cleared.join(", ")}`);
   if (started.length > 0) deps.log(`push alarm: alert started in ${started.join(", ")}`);
 }
@@ -98,9 +139,16 @@ export async function runAlarm(deps: AlarmDeps, state: AlarmState): Promise<numb
       state.lastPollAt = now;
       await poll(deps, state);
     }
-    if (deps.sendBatch !== undefined && store.hasOutbox()) {
-      await deps.sendBatch();
-      if (store.hasOutbox()) return deps.now() + SEND_REARM_MS;
+    // Without a sender nothing would drain the walk; it is planned again once one exists.
+    if (deps.sendBatch === undefined || deps.sendUpdates === undefined) state.walk = [];
+    const walking = () => (state.walk?.length ?? 0) > 0;
+    if (deps.sendBatch !== undefined && (store.hasOutbox() || walking())) {
+      // Events first, then the updates with what is left of the invocation's 45 sends.
+      const used = store.hasOutbox() ? ((await deps.sendBatch(BATCH_SIZE)) ?? BATCH_SIZE) : 0;
+      if (deps.sendUpdates !== undefined && state.walk !== undefined && used < BATCH_SIZE) {
+        await deps.sendUpdates(state.walk, BATCH_SIZE - used);
+      }
+      if (store.hasOutbox() || walking()) return deps.now() + SEND_REARM_MS;
     }
     if (nobody()) return null;
   } catch (error) {

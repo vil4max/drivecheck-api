@@ -1,5 +1,6 @@
+import { endPayload, startPayload, updatePayload } from "./liveActivity.ts";
 import type { ApnsEnv, OutboxItem } from "./registry.ts";
-import { allClearPayload } from "./text.ts";
+import { alertStartPayload, allClearPayload } from "./text.ts";
 
 export type Outcome = "sent" | "drop-token" | "keep";
 
@@ -121,6 +122,56 @@ export class ProviderToken {
   }
 }
 
+/** An `end` may still arrive within 4 hours, so a red activity never stays (owner, 2026-11-10). */
+export const END_LIFETIME_S = 4 * 3600;
+
+/**
+ * The headers and body of one push by kind (spec 004, "APNs payloads"): notices go to the bundle
+ * id topic, Live Activity pushes to its `.push-type.liveactivity` topic; `start` and `end` at
+ * priority 10, `update` at 5, which Apple keeps outside the hourly budget.
+ */
+export function apnsRequest(
+  item: OutboxItem,
+  topic: string,
+  now: number,
+): { headers: Record<string, string>; body: string } {
+  const expiration = (lifetime: number) => String(Math.floor(now / 1000) + lifetime);
+  if (item.kind === "allclear" || item.kind === "alertstart") {
+    return {
+      headers: {
+        "apns-topic": topic,
+        "apns-push-type": "alert",
+        "apns-expiration": expiration(PUSH_LIFETIME_S),
+      },
+      body:
+        item.kind === "allclear"
+          ? allClearPayload(item.region, item.lang)
+          : alertStartPayload(item.region, item.lang),
+    };
+  }
+  const snapshot = item.snapshot;
+  if (snapshot === undefined) throw new Error("a Live Activity push needs the feed state");
+  const live = (priority: string, lifetime: number, body: string) => ({
+    headers: {
+      "apns-topic": `${topic}.push-type.liveactivity`,
+      "apns-push-type": "liveactivity",
+      "apns-priority": priority,
+      "apns-expiration": expiration(lifetime),
+    },
+    body,
+  });
+  switch (item.kind) {
+    case "la-start":
+      return live("10", PUSH_LIFETIME_S, startPayload(item.region, item.lang, snapshot, now));
+    case "la-update":
+      return live("5", PUSH_LIFETIME_S, updatePayload(item.region, item.lang, snapshot, now));
+    case "la-end":
+      return live("10", END_LIFETIME_S, endPayload(item.region, item.lang, snapshot, now));
+    case "la-move":
+      throw new Error("a move is resolved before it is sent");
+  }
+}
+
 /** Sends one queued push to APNs and classifies the answer; logs never name a token. */
 export function apnsSender(
   token: ProviderToken,
@@ -129,17 +180,16 @@ export function apnsSender(
 ): (item: OutboxItem) => Promise<Outcome> {
   return async (item) => {
     let response: Response;
+    const request = apnsRequest(item, token.credentials.topic, token.now());
     try {
       response = await fetch(`${APNS_HOSTS[item.env]}/3/device/${item.token}`, {
         method: "POST",
         headers: {
           authorization: `bearer ${await token.get()}`,
-          "apns-topic": token.credentials.topic,
-          "apns-push-type": "alert",
-          "apns-expiration": String(Math.floor(token.now() / 1000) + PUSH_LIFETIME_S),
+          ...request.headers,
           "content-type": "application/json",
         },
-        body: allClearPayload(item.region, item.lang),
+        body: request.body,
       });
     } catch {
       // The error text may carry the request URL, and with it the token: name only the kind.
