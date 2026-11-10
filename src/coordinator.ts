@@ -94,16 +94,35 @@ export class FeedCoordinator {
 
   async current(): Promise<CoordinatorView> {
     const state = await this.load();
+    this.startAttemptIfDue(state);
+    // A held snapshot is served at once (REQ-REFRESH-010); a slow upstream refreshes it later.
+    if (this.inFlight !== null && state.snapshot === null) {
+      await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
+    }
+    return this.view(state);
+  }
+
+  /**
+   * Like `current()`, but waits for the attempt it starts or joins, so the push alarm judges the
+   * newest answer the polite-load rules allow (spec 003, REQ-PUSHAPI-003).
+   */
+  async refresh(): Promise<CoordinatorView> {
+    const state = await this.load();
+    this.startAttemptIfDue(state);
+    if (this.inFlight !== null) await this.inFlight;
+    return this.view(state);
+  }
+
+  private startAttemptIfDue(state: StoredState): void {
     if (this.inFlight === null && this.mayAttempt(state, this.deps.now())) {
       this.inFlight = this.attempt(state).finally(() => {
         this.inFlight = null;
       });
       this.deps.background(this.inFlight);
     }
-    // A held snapshot is served at once (REQ-REFRESH-010); a slow upstream refreshes it later.
-    if (this.inFlight !== null && state.snapshot === null) {
-      await Promise.race([this.inFlight, this.deps.waitCap(NO_SNAPSHOT_WAIT_MS)]);
-    }
+  }
+
+  private async view(state: StoredState): Promise<CoordinatorView> {
     const map = await this.loadMap();
     return {
       snapshot: state.snapshot,

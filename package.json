@@ -5,7 +5,7 @@
   "description": "Cached Ubilling aerial-alerts API and installable web app for Drive Check",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.sw.json --noEmit",

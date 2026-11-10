@@ -6,9 +6,15 @@ import {
   type MapState,
   type StoredState,
 } from "./coordinator.ts";
+import { type AlarmState, alarmAfterRegistration, runAlarm } from "./push/alarm.ts";
+import { type ApnsEnvVars, apnsSender, credentialsFrom, ProviderToken } from "./push/apns.ts";
+import { type Registration, register } from "./push/registration.ts";
+import { PushStore, type SqlRunner } from "./push/registry.ts";
+import { sendBatch } from "./push/sender.ts";
 import { route, ukrainianRegionCode } from "./router.ts";
 
-export interface Env {
+/** `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` are secrets the owner enters with `wrangler secret put`. */
+export interface Env extends ApnsEnvVars {
   FEED: DurableObjectNamespace<FeedCoordinatorObject>;
 }
 
@@ -18,10 +24,16 @@ const MAP_KEY = "map";
 /** One instance, named "feed", is the only Ubilling client for every location (spec D1). */
 export class FeedCoordinatorObject extends DurableObject<Env> {
   private readonly coordinator: FeedCoordinator;
+  /** The all-clear push registry (spec 003), in this object's SQLite. */
+  private readonly push: PushStore;
+  private readonly alarmState: AlarmState = { lastPollAt: null };
+  private providerToken: ProviderToken | null = null;
+  private readonly sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    this.push = new PushStore(sqlRunner(ctx.storage));
+    const sleep = this.sleep;
     this.coordinator = new FeedCoordinator({
       fetch: (url, init) => fetch(url, init),
       now: () => Date.now(),
@@ -49,6 +61,59 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
   currentMap(): Promise<MapImage | null> {
     return this.coordinator.currentMap();
   }
+
+  async registerDevice(registration: Registration): Promise<204 | 503> {
+    const status = register(this.push, registration, Date.now());
+    if (status === 204) {
+      const next = alarmAfterRegistration(await this.ctx.storage.getAlarm(), Date.now());
+      if (next !== null) await this.ctx.storage.setAlarm(next);
+    }
+    return status;
+  }
+
+  forgetDevice(token: string): void {
+    this.push.deleteDevice(token);
+  }
+
+  /** The all-clear loop (spec 003): poll, detect, send, then schedule the next round or stop. */
+  async alarm(): Promise<void> {
+    const log = (message: string) => console.log(message);
+    const send = this.sender(log);
+    const next = await runAlarm(
+      {
+        store: this.push,
+        refresh: () => this.coordinator.refresh(),
+        deadline: this.sleep,
+        now: () => Date.now(),
+        ...(send === null ? {} : { sendBatch: () => sendBatch(this.push, send, log) }),
+        log,
+      },
+      this.alarmState,
+    );
+    if (next !== null) await this.ctx.storage.setAlarm(next);
+  }
+
+  /** The APNs sender, or null while a credential is missing; the token is cached across alarms. */
+  private sender(log: (message: string) => void) {
+    const found = credentialsFrom(this.env);
+    if ("missing" in found) {
+      if (this.push.hasOutbox()) log(`push disabled, missing: ${found.missing.join(", ")}`);
+      return null;
+    }
+    this.providerToken ??= new ProviderToken(found.credentials, () => Date.now());
+    return apnsSender(this.providerToken, (url, init) => fetch(url, init), log);
+  }
+}
+
+/** `ctx.storage.sql` as the push store's runner. */
+function sqlRunner(storage: DurableObjectStorage): SqlRunner {
+  return {
+    all: (query, ...params) => storage.sql.exec(query, ...params).toArray(),
+    run: (query, ...params) => {
+      storage.sql.exec(query, ...params).toArray();
+    },
+    transaction: (work) => storage.transactionSync(work),
+  };
 }
 
 export default {
@@ -61,6 +126,10 @@ export default {
       getView: () => stub.current(),
       getMap: () => stub.currentMap(),
       clock: Date.now,
+      push: {
+        register: (registration) => stub.registerDevice(registration),
+        forget: (token) => stub.forgetDevice(token),
+      },
     });
   },
 } satisfies ExportedHandler<Env>;

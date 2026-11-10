@@ -3,6 +3,7 @@ import type { CoordinatorView, MapImage } from "./coordinator.ts";
 import { PAGE_CSP } from "./csp.ts";
 import { LANGS, negotiateLanguage } from "./i18n.ts";
 import { renderOffline, renderPage } from "./page.ts";
+import { parseDeletion, parseRegistration, type Registration } from "./push/registration.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
 import { renderRegions } from "./regionsPage.ts";
@@ -16,6 +17,41 @@ export interface RouteInput {
   getMap: () => Promise<MapImage | null>;
   /** Read after the view arrives, so ages and Retry-After count from the answer, not the request. */
   clock: () => number;
+  /** The all-clear push registry (spec 003); without it the path is unknown. */
+  push?: PushEndpoint;
+}
+
+export interface PushEndpoint {
+  register(registration: Registration): Promise<204 | 503>;
+  forget(token: string): Promise<void>;
+}
+
+const PUSH_PATH = "/v1/push/registration";
+
+/**
+ * `PUT` and `DELETE /v1/push/registration` (REQ-PUSHAPI-001). Only the app calls it, so the answer
+ * opens no CORS access, and nothing about the request is logged.
+ */
+async function pushRegistration(request: Request, push: PushEndpoint): Promise<Response> {
+  if (request.method !== "PUT" && request.method !== "DELETE") {
+    return new Response(null, { status: 405, headers: { allow: "PUT, DELETE" } });
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  if (request.method === "DELETE") {
+    const token = parseDeletion(body);
+    if (token === null) return new Response(null, { status: 400 });
+    await push.forget(token);
+    return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+  }
+  const registration = parseRegistration(body);
+  if (registration === null) return new Response(null, { status: 400 });
+  const status = await push.register(registration);
+  return new Response(null, { status, headers: { "cache-control": "no-store" } });
 }
 
 /** The ISO 3166-2:UA code of the visitor's network region, used for this response only. */
@@ -92,9 +128,11 @@ export async function route({
   getView,
   getMap,
   clock,
+  push,
 }: RouteInput): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/region" && request.method === "POST") return chooseRegion(request);
+  if (url.pathname === PUSH_PATH && push !== undefined) return pushRegistration(request, push);
   if (!["/", "/regions", "/offline", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }

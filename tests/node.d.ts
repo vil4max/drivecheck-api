@@ -15,6 +15,19 @@ declare module "node:path" {
   export function resolve(...paths: string[]): string;
 }
 
+// SQLite in memory, so the push registry's SQL runs in tests as the Durable Object runs it.
+declare module "node:sqlite" {
+  export class StatementSync {
+    all(...params: unknown[]): Record<string, unknown>[];
+    run(...params: unknown[]): { changes: number | bigint };
+  }
+  export class DatabaseSync {
+    constructor(path: string);
+    exec(sql: string): void;
+    prepare(sql: string): StatementSync;
+  }
+}
+
 declare module "node:url" {
   export function fileURLToPath(url: string | URL): string;
 }

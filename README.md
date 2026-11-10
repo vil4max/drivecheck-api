@@ -20,7 +20,12 @@ clients and serves them as:
   the choice in a `region` cookie in the browser only. The region shown is `?region=`, else that
   cookie, else the region of the visitor's network, else Kyiv;
 - `GET /offline?lang=`: the Unavailable page the service worker shows offline before any status
-  was saved.
+  was saved;
+- `PUT /v1/push/registration` (`{"token","region","env","lang"}`) and `DELETE
+  /v1/push/registration` (`{"token"}`), both 204: the iOS app's opt-in for the all-clear push
+  ([spec 003](specs/003-allclear-push/spec.md)). While a device is registered, a Durable Object
+  alarm reads the feed every 30 s, and when a region's alarm confirmed at most 10 minutes earlier
+  turns clear in a fresh answer, each device of that region gets one notification through APNs.
 
 The pages are complete without JavaScript. With it, the open Status page refreshes itself through
 `/v1/alerts` on the apps' schedule (60 s, 30 s during an alert, 300 s with a data saver, only while
@@ -35,18 +40,24 @@ Durable Object is the only upstream client: it makes at most one status request 
 one map request per minute for all clients together, never two at once, never a map request within
 3 s of a status request nor a status request within 1 s of a map request, retries a failed status
 request once after 2 s, and honours `Retry-After` (capped at 5 minutes) for both across restarts.
-Browsers never ask Ubilling.
+The all-clear alarm goes through the same object and rules, so it adds at most one status request
+per 30 s, and none while no device is registered. Browsers never ask Ubilling.
 
 ## Never
 
 No alert history (only the latest answer and map are kept, each in one overwritten record), no
-accounts, no ads, no analytics, and nothing stored or logged about visitors on the server; the
-region choice and the offline copy stay in the visitor's browser. Alert data is informational only;
-do not rely on it for critical decisions.
+accounts, no ads, no analytics, and nothing stored or logged about web visitors on the server; the
+region choice and the offline copy stay in the visitor's browser. One exception, approved on
+2026-11-09 for the all-clear push ([spec 003](specs/003-allclear-push/spec.md)): for an iPhone whose
+driver switched the push on, the server keeps the push token, the region code, the APNs environment,
+the language and the time it last heard from the device, deletes them when the driver switches the
+push off or after 60 days without contact, and never logs a token. Alert data is informational
+only; do not rely on it for critical decisions.
 
 ## Develop
 
-Needs Node 22 or later and Python 3 (for the requirement trace).
+Needs Node 22.13 or later (the push registry's tests run its SQL on `node:sqlite`) and Python 3
+(for the requirement trace).
 
 ```
 npm ci
@@ -73,3 +84,17 @@ npx wrangler deploy
 
 The custom domain is attached to the Worker in the Cloudflare dashboard, not in `wrangler.jsonc`;
 a fresh account gets only the `workers.dev` address.
+
+The all-clear push needs an APNs authentication key (`.p8`) enabled for both the sandbox and the
+production environment. Its owner enters it, its key id and the team id as secrets, typing or
+pasting each value only at Wrangler's prompt, never into a file or a chat:
+
+```
+npx wrangler secret put APNS_KEY
+npx wrangler secret put APNS_KEY_ID
+npx wrangler secret put APNS_TEAM_ID
+```
+
+`APNS_TOPIC` (the app's bundle id) is a plain variable in `wrangler.jsonc`. Without the secrets the
+Worker still accepts registrations and tracks changes, sends nothing, and its log names the missing
+secrets. Optional: a rate-limiting rule on `/v1/push/registration` in the Cloudflare dashboard.
