@@ -117,7 +117,7 @@ const SCHEMA_VERSION_KEY = "schemaVersion";
 const DEVICE_COUNT_KEY = "deviceCount";
 const LIVE_ACTIVITY_COUNT_KEY = "liveActivityCount";
 
-/** Everything the server keeps about a Live Activity (REQ-PUSHAPI-009): six fields, nothing else. */
+/** Everything the server keeps about a Live Activity (REQ-PUSHAPI-009): seven fields, nothing else. */
 export interface LiveActivityRow {
   startToken: string;
   /** A catalog region id (`kyiv-city`), not the app's code. */
@@ -354,8 +354,8 @@ export class PushStore {
   }
 
   /**
-   * The oldest queued rows, joined with their device or record. A start keeps the region it was
-   * queued for; an end and a move take the record's region at send time.
+   * The oldest queued rows, joined with their device or record. A Live Activity push takes the
+   * record's region at send time; a notice keeps the region it was queued for.
    */
   takeOutbox(limit: number): OutboxItem[] {
     return this.sql
@@ -383,10 +383,8 @@ export class PushStore {
           kind,
           key,
           token: notice || kind === "la-start" ? key : activity,
-          // An end or a move shows the record's region now (the driver may have moved since).
-          region: String(
-            kind === "la-move" || kind === "la-end" ? row.l_region : row.queued_region,
-          ),
+          // A Live Activity push shows the record's region now (the driver may have moved since).
+          region: String(notice ? row.queued_region : row.l_region),
           env: (notice ? row.d_env : row.l_env) as ApnsEnv,
           lang: (notice ? row.d_lang : row.l_lang) as Lang,
           createdAt: Number(row.created_at),

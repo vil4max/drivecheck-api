@@ -1,5 +1,6 @@
 import type { CoordinatorView } from "../coordinator.ts";
 import type { Snapshot } from "../feed.ts";
+import { isStale } from "../status.ts";
 import { type Changes, detectChanges, parseStatusRecord } from "./changes.ts";
 import type { PushStore } from "./registry.ts";
 import { BATCH_SIZE, type WalkEntry } from "./sender.ts";
@@ -141,6 +142,12 @@ export async function runAlarm(deps: AlarmDeps, state: AlarmState): Promise<numb
     }
     // Without a sender nothing would drain the walk; it is planned again once one exists.
     if (deps.sendBatch === undefined || deps.sendUpdates === undefined) state.walk = [];
+    // AC-3, AC-5: a walk the stale feed cuts short is due again at the next fresh poll, not 5
+    // minutes after it was planned; sendUpdates sends nothing from a stale snapshot either way.
+    if (state.walk?.length && (state.latest == null || isStale(state.latest, now))) {
+      for (const entry of state.walk) delete state.updatedAt?.[entry.region];
+      state.walk = [];
+    }
     const walking = () => (state.walk?.length ?? 0) > 0;
     if (deps.sendBatch !== undefined && (store.hasOutbox() || walking())) {
       // Events first, then the updates with what is left of the invocation's 45 sends.

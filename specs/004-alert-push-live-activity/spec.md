@@ -36,7 +36,7 @@ and at the all-clear the existing notice plus a green activity that leaves the L
 Numbered for the server; the app's criteria they serve are in brackets.
 
 - **AC-1** [app AC-2, AC-9] `PUT /v1/push/live-activity` with exactly `startToken`, `region`,
-  `env`, `lang` and an optional `activityToken`, each valid, stores or replaces the one record keyed
+  `env`, `lang`, an optional `activityToken` and an optional `urgent` (AC-12), each valid, stores or replaces the one record keyed
   by `startToken` and answers 204; `DELETE /v1/push/live-activity` with `{"startToken"}` deletes it
   and answers 204, also for an unknown token. Any other body answers 400 and stores nothing; any
   other method answers 405. The record is independent of `/v1/push/registration`.
@@ -84,7 +84,7 @@ Numbered for the server; the app's criteria they serve are in brackets.
 ## API contract (from the app's code at 504d252)
 
 - `PUT /v1/push/live-activity`, JSON body
-  `{"startToken","region","env","lang"[,"activityToken"]}`: both tokens lowercase hex, `region` an iOS
+  `{"startToken","region","env","lang"[,"activityToken"][,"urgent"]}`: both tokens lowercase hex, `region` an iOS
   `AlertRegion` raw value (`kyivCity`, ...), `env` `production|sandbox`, `lang` `en|uk|ru`;
   `activityToken` is absent when the app holds no activity (Swift's synthesized `Codable` omits a
   `nil` optional). The app sends it again whenever a field changes and at least every 7 days. Any
@@ -139,8 +139,8 @@ it ends in green with a dismissal 5 minutes later; a stale, failing or unknown f
 Status: approved (owner, 2026-11-10)
 
 Given a request to `/v1/push/live-activity`\
-When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`,
-each valid, or a `DELETE` with a start token\
+When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`
+and `urgent` (REQ-PUSHAPI-013), each valid, or a `DELETE` with a start token\
 Then the server stores or replaces, or deletes, that one record and answers 204; any other body
 answers 400 and stores nothing, any other method 405, a new start token above 5,000 records 503,
 and the response opens no CORS access

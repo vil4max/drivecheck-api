@@ -298,6 +298,21 @@ Lows:
 
 The urgent switch (P10) arrived after the review and was not reviewed by it.
 
+Second review, 2026-11-10 (same reviewer, fresh context, on the urgent switch and the repairs
+above): no high or medium findings; six lows, tests in `tests/pushEdges.test.ts`:
+- R1 a queued end that resolves to a red update did not check freshness: repaired; a red update
+  needs a fresh snapshot like a move, a green end does not.
+- R2 a queued start kept its queued region after a move: repaired; every Live Activity push takes
+  the record's region at send time, so a start goes to the new region only if it is in alarm.
+- R3 a walk abandoned on a stale feed left its regions due 5 minutes after planning: repaired; the
+  alarm forgets their last update time, so the next fresh poll walks them again.
+- R4 AC-1, the API contract and REQ-PUSHAPI-008 did not name the optional `urgent`: repaired.
+- R5 a stale "six fields" comment on the record type: repaired.
+- R6 migrations run in the coordinator's constructor, so a failing step would take down
+  `/v1/alerts` too; the one known case is a database created by the unreleased commit f4236d5,
+  which has `kind` but no `schemaVersion`. Not fixed: nothing persisted ran that build; checked
+  before deploy.
+
 Budget correction: Cloudflare's SQLite storage page states that every index row update counts as
 an extra row written, so option A costs the upper figure, 4 rows per queued push.
 

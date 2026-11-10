@@ -151,6 +151,59 @@ describe("edges of the Live Activity loop", () => {
     expect(store.liveActivity(S1)?.activityToken).toBe(ACT1);
   });
 
+  test("REQ-PUSH-008 a queued end that would turn red needs a fresh snapshot", async () => {
+    const { store } = memoryStore();
+    const { sent, send } = recorder();
+    // Kharkiv cleared and an end was queued; the last fresh snapshot shows it in alarm again, but
+    // it is stale by now, so no red update dated from it goes out and the token stays.
+    addRecord(store, S1, "kharkiv", ACT1);
+    store.enqueueEnds(["kharkiv"], T0);
+    await sendBatch(store, send, () => {}, {
+      latest: snap([KHARKIV], T0),
+      now: () => T0 + 120_001,
+    });
+    expect(sent).toEqual([]);
+    expect(store.hasOutbox()).toBe(false);
+    expect(store.liveActivity(S1)?.activityToken).toBe(ACT1);
+  });
+
+  test("REQ-PUSH-008 a queued start follows the record to its region at send time", async () => {
+    const { store } = memoryStore();
+    const { sent, send } = recorder();
+    const latest = snap([KHARKIV, LVIV], T0 + 10_000);
+    // Queued for Kharkiv; the driver moved to clear Odesa before it was sent: no red activity.
+    addRecord(store, S1, "kharkiv", null);
+    store.enqueueLiveActivityStarts("kharkiv", "start:kharkiv@1", T0);
+    addRecord(store, S1, "odesa", null, T0 + 5_000);
+    // Queued for Kharkiv; the driver moved to Lviv, in alarm: the start names Lviv.
+    const S2 = tokenNo(0x52);
+    addRecord(store, S2, "kharkiv", null);
+    store.enqueueLiveActivityStarts("kharkiv", "start:kharkiv@1", T0);
+    addRecord(store, S2, "lviv", null, T0 + 5_000);
+    await sendBatch(store, send, () => {}, { latest, now: () => T0 + 10_000 });
+    expect(sent.map((item) => [item.kind, item.key, item.region])).toEqual([
+      ["la-start", S2, "lviv"],
+    ]);
+    expect(store.hasOutbox()).toBe(false);
+  });
+
+  test("REQ-PUSH-008 a walk abandoned on a stale feed is due again at the next fresh poll", async () => {
+    const { store } = memoryStore();
+    for (let n = 0; n < 60; n += 1)
+      addRecord(store, tokenNo(0x1000 + n), "kharkiv", tokenNo(0x2000 + n));
+    const h = harness(store);
+    const updates = () => h.sent.filter((item) => item.kind === "la-update").length;
+    // A cold start in alarm plans the walk and sends 45 of the 60 updates.
+    await h.alarm(T0, snap([KHARKIV], T0));
+    expect(updates()).toBe(45);
+    // The feed goes stale before the walk finishes: the rest is abandoned.
+    await h.alarm(T0 + 120_001, snap([KHARKIV], T0 + 120_001, 120_001));
+    expect(updates()).toBe(45);
+    // The first fresh poll walks the region again rather than waiting out the 5 minutes.
+    await h.alarm(T0 + 150_001, snap([KHARKIV], T0 + 150_001));
+    expect(updates()).toBe(90);
+  });
+
   test("REQ-PUSH-008 the update walk stops when the feed turns stale", async () => {
     const { store } = memoryStore();
     for (let n = 0; n < 60; n += 1)

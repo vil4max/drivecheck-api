@@ -60,10 +60,10 @@ async function sendAll(
 /**
  * A queued row as it will be sent, or null to drop it unsent. Every Live Activity push is checked
  * against the last fresh snapshot when it is sent, not only when it was queued, so a backlog never
- * shows a state the feed has already left: a start goes only to a region still in alarm, and an
- * end or a move shows the state of the record's region now (AC-4, AC-10), a red update in alarm or
- * the green end when clear. An activity token cleared since queueing has nothing to reach, and a
- * move also needs that snapshot to be fresh.
+ * shows a state the feed has already left: every push takes the record's region now (AC-10), a
+ * start goes only when that region is still in alarm, and an end or a move shows its state (AC-4),
+ * a red update in alarm or the green end when clear. An activity token cleared since queueing has
+ * nothing to reach, and a move or a red update also needs that snapshot to be fresh.
  */
 function resolve(item: OutboxItem, latest: Snapshot | null, now: number): OutboxItem | null {
   if (item.kind === "allclear" || item.kind === "alertstart") return item;
@@ -72,7 +72,8 @@ function resolve(item: OutboxItem, latest: Snapshot | null, now: number): Outbox
   const state = apiKey === undefined ? undefined : latest.feed.states[apiKey];
   if (state === undefined) return null;
   if (item.kind === "la-start") return state.alertnow ? { ...item, snapshot: latest } : null;
-  if (item.kind === "la-move" && isStale(latest, now)) return null;
+  // A red update dated from a stale snapshot would look current; a green end stays true.
+  if ((item.kind === "la-move" || state.alertnow) && isStale(latest, now)) return null;
   return { ...item, kind: state.alertnow ? "la-update" : "la-end", snapshot: latest };
 }
 
