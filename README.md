@@ -25,7 +25,17 @@ clients and serves them as:
   /v1/push/registration` (`{"token"}`), both 204: the iOS app's opt-in for the all-clear push
   ([spec 003](specs/003-allclear-push/spec.md)). While a device is registered, a Durable Object
   alarm reads the feed every 30 s, and when a region's alarm confirmed at most 10 minutes earlier
-  turns clear in a fresh answer, each device of that region gets one notification through APNs.
+  turns clear in a fresh answer, each device of that region gets one notification through APNs;
+  when a region's clear status confirmed at most 10 minutes earlier turns to alarm, it gets the
+  alert-start notification. Every notification plays the app's own short, calm sound; the alert
+  start is time-sensitive, so it reaches the driver through Focus unless Time Sensitive
+  Notifications are off for the app in Settings, and the all-clear is not;
+- `PUT /v1/push/live-activity` (`{"startToken","region","env","lang"[,"activityToken"]}`) and
+  `DELETE /v1/push/live-activity` (`{"startToken"}`), both 204: the iOS app's Live Activity tokens
+  ([spec 004](specs/004-alert-push-live-activity/spec.md)), kept whatever the notification switch.
+  The same alarm starts the Live Activity in red at a confirmed alert start, updates it every
+  5 minutes while the alert lasts, and ends it in green, removed 5 minutes later, as soon as a fresh
+  answer shows the region clear.
 
 The pages are complete without JavaScript. With it, the open Status page refreshes itself through
 `/v1/alerts` on the apps' schedule (60 s, 30 s during an alert, 300 s with a data saver, only while
@@ -40,8 +50,9 @@ Durable Object is the only upstream client: it makes at most one status request 
 one map request per minute for all clients together, never two at once, never a map request within
 3 s of a status request nor a status request within 1 s of a map request, retries a failed status
 request once after 2 s, and honours `Retry-After` (capped at 5 minutes) for both across restarts.
-The all-clear alarm goes through the same object and rules, so it adds at most one status request
-per 30 s, and none while no device is registered. Browsers never ask Ubilling.
+The push alarm goes through the same object and rules, so it adds at most one status request
+per 30 s, and none while no device and no Live Activity is registered; the Live Activity updates
+reuse the answer it already has. Browsers never ask Ubilling.
 
 ## Never
 
@@ -51,8 +62,12 @@ region choice and the offline copy stay in the visitor's browser. One exception,
 2026-11-09 for the all-clear push ([spec 003](specs/003-allclear-push/spec.md)): for an iPhone whose
 driver switched the push on, the server keeps the push token, the region code, the APNs environment,
 the language and the time it last heard from the device, deletes them when the driver switches the
-push off or after 60 days without contact, and never logs a token. Alert data is informational
-only; do not rely on it for critical decisions.
+push off or after 60 days without contact, and never logs a token. A second exception, approved
+on 2026-11-10 ([spec 004](specs/004-alert-push-live-activity/spec.md)): for an iPhone with Live
+Activities on, the server keeps the Live Activity start token, the update token of the running
+activity, the region code, the APNs environment, the language and the last-contact time, under
+the same deletion rules. Alert data is informational only; do not rely on it for critical
+decisions.
 
 ## Develop
 
@@ -97,4 +112,6 @@ npx wrangler secret put APNS_TEAM_ID
 
 `APNS_TOPIC` (the app's bundle id) is a plain variable in `wrangler.jsonc`. Without the secrets the
 Worker still accepts registrations and tracks changes, sends nothing, and its log names the missing
-secrets. Optional: a rate-limiting rule on `/v1/push/registration` in the Cloudflare dashboard.
+secrets. The same key signs the Live Activity pushes; their topic is `APNS_TOPIC` with
+`.push-type.liveactivity` appended, so no further variable is needed. Optional: a rate-limiting
+rule on `/v1/push/registration` and `/v1/push/live-activity` in the Cloudflare dashboard.

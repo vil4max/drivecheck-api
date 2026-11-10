@@ -17,7 +17,9 @@ storing the device token and region. The APNs key is the owner's; he creates and
 ## Goal
 
 A driver who opted in on iOS gets one notification when the alert in their region ends, without
-opening the app. Nothing else is pushed: no alert-start push, no history, no account.
+opening the app. Nothing else is pushed: no alert-start push, no history, no account. (Widened on
+2026-11-10 by [spec 004](../004-alert-push-live-activity/spec.md): the alert-start notice and the
+server-driven Live Activity.)
 
 ## Acceptance criteria
 
@@ -87,7 +89,8 @@ Status: approved (owner, 2026-11-09)
 Given at least one device is registered\
 When the Durable Object alarm fires\
 Then it asks the coordinator for the feed at most once per 30 s, never past the coordinator's floor
-or 429 window, and it stops re-arming once no device is registered
+or 429 window, and it stops re-arming once no device is registered (since spec 004: no device and
+no Live Activity record)
 
 ### REQ-PUSHAPI-004 — Batches within the Free plan
 
@@ -115,7 +118,9 @@ When it is built\
 Then its title and body are, in the device's language, with the region's name in that language:
 en "All clear: {region}" / "The air alert has ended."; uk "Відбій тривоги: {region}" /
 "Повітряна тривога закінчилась."; ru "Отбой тревоги: {region}" / "Воздушная тревога окончена.";
-it plays the default sound (`"sound": "default"`, owner, 2026-11-10);
+it plays the short, calm Drive Check sound the app bundles (`"sound": "drivecheck.caf"`; iOS
+falls back to the default sound while a build lacks the file; owner, 2026-11-10, replacing the
+default sound decided earlier the same day);
 it expires 5 minutes after it is sent (`apns-expiration`), and a queued push older than 5 minutes
 is deleted unsent
 
@@ -130,7 +135,8 @@ alarm processes nothing and re-arms
 
 ## Out of scope
 
-An alert-start push, other threat types, Live Activity updates, neighbouring regions, the web app
+An alert-start push and Live Activity updates (both since brought in by spec 004), other threat
+types, neighbouring regions, the web app
 (no Web Push), creating or rotating the APNs key, App Store Connect changes.
 
 ## Decisions

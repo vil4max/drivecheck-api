@@ -161,7 +161,7 @@ describe("sending all-clear pushes", () => {
     expect(refreshes).toBe(0);
   });
 
-  test("REQ-PUSHAPI-006 every queued push carries the default sound", async () => {
+  test("REQ-PUSHAPI-006 every notice carries the calm Drive Check sound", async () => {
     const { store } = memoryStore();
     const langs = ["en", "uk", "ru"] as const;
     for (let n = 0; n < 50; n += 1) register(store, tokenNo(n), "kharkiv", langs[n % 3]);
@@ -176,12 +176,23 @@ describe("sending all-clear pushes", () => {
     }
     store.enqueue("kharkiv", "kharkiv@1", T0);
     store.enqueue("lviv", "lviv@1", T0);
+    // The alert-start notice too (spec 004): the same sound, time-sensitive, never critical.
+    store.enqueue("lviv", "start:lviv@1", T0, "alertstart");
     const apns = fakeApns();
     const { credentials } = await testCredentials();
     const send = apnsSender(new ProviderToken(credentials, () => T0), apns.fetch, () => {});
     while (store.hasOutbox()) await sendBatch(store, send, () => {});
-    expect(apns.sent).toHaveLength(60);
-    for (const push of apns.sent) expect(JSON.parse(push.body).aps.sound).toBe("default");
+    expect(apns.sent).toHaveLength(70);
+    for (const push of apns.sent) {
+      const { aps } = JSON.parse(push.body);
+      expect(aps.sound).toBe("drivecheck.caf");
+      // The alert-start notice is title only; the all-clear has a body and stays calm.
+      const level = aps.alert.body === undefined ? "time-sensitive" : "active";
+      expect(aps["interruption-level"] ?? "active").toBe(level);
+    }
+    expect(apns.sent.filter((p) => JSON.parse(p.body).aps.alert.body === undefined)).toHaveLength(
+      10,
+    );
   });
 
   test("REQ-PUSHAPI-005 APNs answers decide what is deleted", async () => {
@@ -318,7 +329,7 @@ describe("sending all-clear pushes", () => {
           title: "Відбій тривоги: Харківська область",
           body: "Повітряна тривога закінчилась.",
         },
-        sound: "default",
+        sound: "drivecheck.caf",
       },
     });
     expect(apns.sent.find((s) => s.url.endsWith(TOKEN_B))!.url).toBe(

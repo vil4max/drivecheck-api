@@ -18,11 +18,62 @@ const BODY: Record<Lang, string> = {
 };
 
 export function allClearText(regionId: string, lang: Lang): AllClearText {
-  const name = regionById(regionId)?.names[lang] ?? regionId;
-  return { title: TITLE[lang](name), body: BODY[lang] };
+  return { title: TITLE[lang](regionName(regionId, lang)), body: BODY[lang] };
 }
 
-/** The APNs payload: the alert with the default sound (owner, 2026-11-10), nothing else. */
+/**
+ * Every push from this server plays this short, calm sound, which the app bundles; while a build
+ * lacks the file, iOS plays the default sound instead (owner, 2026-11-10).
+ */
+export const PUSH_SOUND = "drivecheck.caf";
+/**
+ * An alert start reaches the driver through Focus unless the user turned Time Sensitive
+ * Notifications off for the app in Settings (owner, 2026-11-10); the all-clear and the updates
+ * stay `active`, and nothing is ever `critical` (spec 004 AC-12).
+ */
+export const ALERT_START_LEVEL = "time-sensitive";
+
+/** The APNs payload: the alert with the Drive Check sound, nothing else. */
 export function allClearPayload(regionId: string, lang: Lang): string {
-  return JSON.stringify({ aps: { alert: allClearText(regionId, lang), sound: "default" } });
+  return JSON.stringify({ aps: { alert: allClearText(regionId, lang), sound: PUSH_SOUND } });
+}
+
+// The owner's wording at the app's plan gate, 2026-11-10 (spec 004, REQ-PUSHAPI-012); title only.
+const ALERT_START: Record<Lang, (region: string) => string> = {
+  en: (region) => `Air raid alert: ${region}`,
+  uk: (region) => `Повітряна тривога: ${region}`,
+  ru: (region) => `Воздушная тревога: ${region}`,
+};
+
+export function alertStartTitle(regionId: string, lang: Lang): string {
+  return ALERT_START[lang](regionName(regionId, lang));
+}
+
+/** The alert-start notice: title only, the Drive Check sound, time-sensitive. */
+export function alertStartPayload(regionId: string, lang: Lang): string {
+  return JSON.stringify({
+    aps: {
+      alert: { title: alertStartTitle(regionId, lang) },
+      sound: PUSH_SOUND,
+      "interruption-level": ALERT_START_LEVEL,
+    },
+  });
+}
+
+export function regionName(regionId: string, lang: Lang): string {
+  return regionById(regionId)?.names[lang] ?? regionId;
+}
+
+// The app's `StatusSourceLabel` and its String Catalog (`status.source.alertFeed`, `.external`).
+const SOURCE_LABELS: Record<Lang, { alertFeed: string; external: string }> = {
+  en: { alertFeed: "Alert feed", external: "External feed" },
+  uk: { alertFeed: "Стрічка тривог", external: "Зовнішнє джерело" },
+  ru: { alertFeed: "Лента тревог", external: "Внешний источник" },
+};
+
+/** The source name the app writes into the Live Activity, by the app's own rule. */
+export function sourceLabel(source: string, lang: Lang): string {
+  const normalized = source.toLowerCase();
+  const isAlertFeed = ["mørk", "mork", "skogen"].some((part) => normalized.includes(part));
+  return isAlertFeed ? SOURCE_LABELS[lang].alertFeed : SOURCE_LABELS[lang].external;
 }
