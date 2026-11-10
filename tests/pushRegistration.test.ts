@@ -1,33 +1,12 @@
 import { describe, expect, test } from "vitest";
-import type { CoordinatorView } from "../src/coordinator";
-import { MAX_DEVICES, register } from "../src/push/registration";
+import { MAX_DEVICES } from "../src/push/registration";
 import type { PushStore } from "../src/push/registry";
-import { route } from "../src/router";
-import { memoryStore, TOKEN_A, TOKEN_B, tokenNo } from "./pushSupport";
-import { snapshotWith, T0 } from "./support";
+import { memoryStore, pushClient, TOKEN_A, TOKEN_B, tokenNo } from "./pushSupport";
+import { T0 } from "./support";
 
 const PATH = "/v1/push/registration";
 
-/** The router with its push endpoint wired to `store`, as the Worker wires it to the object. */
-function client(store: PushStore, clock = { now: T0 }) {
-  const view: CoordinatorView = { snapshot: snapshotWith([]), rateLimitedUntil: null };
-  return (method: string, body?: unknown, raw?: string) =>
-    route({
-      request: new Request(`https://drivecheck.example${PATH}`, {
-        method,
-        headers: { "content-type": "application/json" },
-        ...(raw !== undefined || body !== undefined ? { body: raw ?? JSON.stringify(body) } : {}),
-      }),
-      regionCode: null,
-      getView: async () => view,
-      getMap: async () => null,
-      clock: () => clock.now,
-      push: {
-        register: async (registration) => register(store, registration, clock.now),
-        forget: async (token) => store.deleteDevice(token),
-      },
-    });
-}
+const client = (store: PushStore, clock = { now: T0 }) => pushClient(PATH, store, clock);
 
 const valid = { token: TOKEN_A, region: "kharkiv", env: "production", lang: "uk" };
 

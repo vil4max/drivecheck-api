@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { CoordinatorView } from "../src/coordinator";
 import type { Snapshot } from "../src/feed";
-import { type AlarmDeps, type AlarmState, runAlarm } from "../src/push/alarm";
-import { type ApnsCredentials, apnsSender, ProviderToken } from "../src/push/apns";
+import { apnsSender, ProviderToken } from "../src/push/apns";
 import { registerLiveActivity } from "../src/push/liveActivity";
 import type { PushStore } from "../src/push/registry";
-import { sendBatch, sendUpdates } from "../src/push/sender";
-import { memoryStore, TOKEN_A, tokenNo } from "./pushSupport";
+import { alarmLoop, generatedCredentials, memoryStore, TOKEN_A, tokenNo } from "./pushSupport";
 import { snapshotWith, T0 } from "./support";
 
 const KHARKIV = "Харківська область";
@@ -15,18 +12,6 @@ const S1 = tokenNo(0x51);
 const S2 = tokenNo(0x52);
 const ACT1 = tokenNo(0xa1);
 const TOPIC = "vil4max.RegionalCheck";
-
-async function credentials(): Promise<ApnsCredentials> {
-  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-    "sign",
-    "verify",
-  ])) as CryptoKeyPair;
-  const der = new Uint8Array(
-    (await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer,
-  );
-  const key = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----\n`;
-  return { key, keyId: "KEYID12345", teamId: "TEAMID1234", topic: TOPIC };
-}
 
 interface Sent {
   token: string;
@@ -73,49 +58,24 @@ async function harness(answer: (token: string) => [number, string | null] = () =
     const [status, reason] = answer(token);
     return new Response(reason === null ? null : JSON.stringify({ reason }), { status });
   };
-  const send = apnsSender(new ProviderToken(await credentials(), () => clock.now), fetch, () => {});
-  let view: CoordinatorView = { snapshot: null, rateLimitedUntil: null };
-  const state: AlarmState = { lastPollAt: null };
-  const deps: AlarmDeps = {
-    store,
-    refresh: async () => view,
-    deadline: () => new Promise<void>(() => {}),
-    now: () => clock.now,
-    sendBatch: (limit) =>
-      sendBatch(store, send, () => {}, {
-        limit,
-        latest: state.latest ?? null,
-        now: () => clock.now,
-      }),
-    sendUpdates: (walk, limit) =>
-      sendUpdates(store, walk, send, () => {}, {
-        limit,
-        latest: state.latest ?? null,
-        now: () => clock.now,
-      }),
-    log: () => {},
-  };
+  const send = apnsSender(
+    new ProviderToken(await generatedCredentials(), () => clock.now),
+    fetch,
+    () => {},
+  );
+  const loop = alarmLoop(store, send, clock);
   return {
     db,
     store,
     sent,
-    state,
+    state: loop.state,
     maxInFlight: () => maxInFlight,
     /** One alarm at `t` that sees `snapshot` (null: the feed failed). */
-    alarm: (t: number, snapshot: Snapshot | null) => {
-      clock.now = t;
-      view = { snapshot, rateLimitedUntil: null };
-      return runAlarm(deps, state);
-    },
+    alarm: (t: number, snapshot: Snapshot | null) => loop.alarm(t, snapshot),
     /** Alarms at `t` until nothing is left to send this round. */
     drain: async (t: number, snapshot: Snapshot | null) => {
-      clock.now = t;
-      view = { snapshot, rateLimitedUntil: null };
-      let next = await runAlarm(deps, state);
-      while (next !== null && next - clock.now <= 1_000) {
-        clock.now = next;
-        next = await runAlarm(deps, state);
-      }
+      let next = await loop.alarm(t, snapshot);
+      while (next !== null && next - clock.now <= 1_000) next = await loop.alarm(next, snapshot);
     },
     activityToken: (startToken: string) =>
       (

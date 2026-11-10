@@ -1,13 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
-import type { CoordinatorView } from "../src/coordinator";
 import type { Snapshot } from "../src/feed";
-import { type AlarmDeps, type AlarmState, runAlarm } from "../src/push/alarm";
 import { apnsSender, type Outcome, ProviderToken } from "../src/push/apns";
 import { registerLiveActivity } from "../src/push/liveActivity";
 import type { OutboxItem, PushStore } from "../src/push/registry";
 import { sendBatch, sendUpdates, type WalkEntry } from "../src/push/sender";
-import { generatedCredentials, memoryStore, storeOn, tokenNo } from "./pushSupport";
+import { alarmLoop, generatedCredentials, memoryStore, storeOn, tokenNo } from "./pushSupport";
 import { snapshotWith, T0 } from "./support";
 
 const KHARKIV = "Харківська область";
@@ -48,37 +46,7 @@ function recorder() {
 /** The alarm with a recording sender; `alarm` takes the view's 429 window too. */
 function harness(store: PushStore) {
   const { sent, send } = recorder();
-  const clock = { now: T0 };
-  let view: CoordinatorView = { snapshot: null, rateLimitedUntil: null };
-  const state: AlarmState = { lastPollAt: null };
-  const deps: AlarmDeps = {
-    store,
-    refresh: async () => view,
-    deadline: () => new Promise<void>(() => {}),
-    now: () => clock.now,
-    sendBatch: (limit) =>
-      sendBatch(store, send, () => {}, {
-        limit,
-        latest: state.latest ?? null,
-        now: () => clock.now,
-      }),
-    sendUpdates: (walk, limit) =>
-      sendUpdates(store, walk, send, () => {}, {
-        limit,
-        latest: state.latest ?? null,
-        now: () => clock.now,
-      }),
-    log: () => {},
-  };
-  return {
-    sent,
-    state,
-    alarm: (t: number, snapshot: Snapshot | null, rateLimitedUntil: number | null = null) => {
-      clock.now = t;
-      view = { snapshot, rateLimitedUntil };
-      return runAlarm(deps, state);
-    },
-  };
+  return { sent, ...alarmLoop(store, send, { now: T0 }) };
 }
 
 describe("edges of the Live Activity loop", () => {

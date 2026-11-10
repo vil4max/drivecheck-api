@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { CoordinatorView } from "../src/coordinator";
 import type { Snapshot } from "../src/feed";
-import { type AlarmDeps, type AlarmState, runAlarm } from "../src/push/alarm";
 import { apnsSender, ProviderToken } from "../src/push/apns";
 import { parseLiveActivity, registerLiveActivity } from "../src/push/liveActivity";
 import { parseRegistration, register } from "../src/push/registration";
-import { sendBatch, sendUpdates } from "../src/push/sender";
-import { generatedCredentials, memoryStore, tokenNo } from "./pushSupport";
+import { alarmLoop, generatedCredentials, memoryStore, tokenNo } from "./pushSupport";
 import { snapshotWith, T0 } from "./support";
 
 const KHARKIV = "Харківська область";
@@ -55,32 +52,8 @@ describe("interruption levels", () => {
       },
       () => {},
     );
-    let view: CoordinatorView = { snapshot: null, rateLimitedUntil: null };
-    const state: AlarmState = { lastPollAt: null };
-    const deps: AlarmDeps = {
-      store,
-      refresh: async () => view,
-      deadline: () => new Promise<void>(() => {}),
-      now: () => clock.now,
-      sendBatch: (limit) =>
-        sendBatch(store, send, () => {}, {
-          limit,
-          latest: state.latest ?? null,
-          now: () => clock.now,
-        }),
-      sendUpdates: (walk, limit) =>
-        sendUpdates(store, walk, send, () => {}, {
-          limit,
-          latest: state.latest ?? null,
-          now: () => clock.now,
-        }),
-      log: () => {},
-    };
-    const at = async (t: number, snapshot: Snapshot) => {
-      clock.now = t;
-      view = { snapshot, rateLimitedUntil: null };
-      await runAlarm(deps, state);
-    };
+    const loop = alarmLoop(store, send, clock);
+    const at = (t: number, snapshot: Snapshot) => loop.alarm(t, snapshot);
     await at(T0, snap([], T0));
     await at(T0 + 30_000, snap([KHARKIV], T0 + 30_000));
     const level = (token: string) => sent.find((s) => s.token === token)?.aps["interruption-level"];

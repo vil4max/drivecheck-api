@@ -1,42 +1,24 @@
 import { describe, expect, test } from "vitest";
-import type { CoordinatorView } from "../src/coordinator";
 import { type AlarmDeps, runAlarm } from "../src/push/alarm";
 import { apnsSender, ProviderToken } from "../src/push/apns";
-import { MAX_LIVE_ACTIVITIES, registerLiveActivity } from "../src/push/liveActivity";
+import { MAX_LIVE_ACTIVITIES } from "../src/push/liveActivity";
 import type { PushStore } from "../src/push/registry";
 import { sendBatch } from "../src/push/sender";
-import { route } from "../src/router";
-import { generatedCredentials, memoryStore, TOKEN_A, TOKEN_B, tokenNo } from "./pushSupport";
+import {
+  generatedCredentials,
+  memoryStore,
+  pushClient,
+  TOKEN_A,
+  TOKEN_B,
+  tokenNo,
+} from "./pushSupport";
 import { snapshotWith, T0 } from "./support";
 
 const PATH = "/v1/push/live-activity";
 const KHARKIV_KEY = "Харківська область";
 const DAY = 86_400_000;
 
-/** The router with its Live Activity endpoint wired to `store`, as the Worker wires the object. */
-function client(store: PushStore, clock = { now: T0 }) {
-  const view: CoordinatorView = { snapshot: snapshotWith([]), rateLimitedUntil: null };
-  return (method: string, body?: unknown, raw?: string) =>
-    route({
-      request: new Request(`https://drivecheck.example${PATH}`, {
-        method,
-        headers: { "content-type": "application/json" },
-        ...(raw !== undefined || body !== undefined ? { body: raw ?? JSON.stringify(body) } : {}),
-      }),
-      regionCode: null,
-      getView: async () => view,
-      getMap: async () => null,
-      clock: () => clock.now,
-      push: {
-        register: async () => 204,
-        forget: async () => {},
-      },
-      liveActivity: {
-        register: async (registration) => registerLiveActivity(store, registration, clock.now),
-        forget: async (startToken) => store.deleteLiveActivity(startToken),
-      },
-    });
-}
+const client = (store: PushStore, clock = { now: T0 }) => pushClient(PATH, store, clock);
 
 const valid = { startToken: TOKEN_A, region: "kharkiv", env: "production", lang: "uk" };
 
