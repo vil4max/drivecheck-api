@@ -161,6 +161,29 @@ describe("sending all-clear pushes", () => {
     expect(refreshes).toBe(0);
   });
 
+  test("REQ-PUSHAPI-006 every queued push carries the default sound", async () => {
+    const { store } = memoryStore();
+    const langs = ["en", "uk", "ru"] as const;
+    for (let n = 0; n < 50; n += 1) register(store, tokenNo(n), "kharkiv", langs[n % 3]);
+    for (let n = 50; n < 60; n += 1) {
+      store.upsertDevice({
+        token: tokenNo(n),
+        region: "lviv",
+        env: "sandbox",
+        lang: "en",
+        lastSeen: T0,
+      });
+    }
+    store.enqueue("kharkiv", "kharkiv@1", T0);
+    store.enqueue("lviv", "lviv@1", T0);
+    const apns = fakeApns();
+    const { credentials } = await testCredentials();
+    const send = apnsSender(new ProviderToken(credentials, () => T0), apns.fetch, () => {});
+    while (store.hasOutbox()) await sendBatch(store, send, () => {});
+    expect(apns.sent).toHaveLength(60);
+    for (const push of apns.sent) expect(JSON.parse(push.body).aps.sound).toBe("default");
+  });
+
   test("REQ-PUSHAPI-005 APNs answers decide what is deleted", async () => {
     const answers: Record<string, [number, string | null]> = {
       [tokenNo(1)]: [410, "Unregistered"],
@@ -295,6 +318,7 @@ describe("sending all-clear pushes", () => {
           title: "Відбій тривоги: Харківська область",
           body: "Повітряна тривога закінчилась.",
         },
+        sound: "default",
       },
     });
     expect(apns.sent.find((s) => s.url.endsWith(TOKEN_B))!.url).toBe(

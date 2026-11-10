@@ -308,3 +308,11 @@ Questions for the owner beyond the critic:
 The 10-minute gap rule for change detection is unchanged; the 5 minutes above apply to the push's
 lifetime and the outbox only. The requirements of spec 003 become approved with Group 4 (T009),
 once tests cite them, so the requirement trace stays green after every group.
+
+After implementation:
+
+- Q5 The payload carried only the alert (no sound), since the spec did not ask for one. Should the
+  push play a sound?
+  - Decision: yes, the default sound: `"sound": "default"` in `aps` for every push (owner,
+    2026-11-10); added to REQ-PUSHAPI-006 and tested by `REQ-PUSHAPI-006 every queued push
+    carries the default sound`.

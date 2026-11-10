@@ -22,7 +22,7 @@ export function allClearText(regionId: string, lang: Lang): AllClearText {
   return { title: TITLE[lang](name), body: BODY[lang] };
 }
 
-/** The APNs payload: an alert and nothing else. */
+/** The APNs payload: the alert with the default sound (owner, 2026-11-10), nothing else. */
 export function allClearPayload(regionId: string, lang: Lang): string {
-  return JSON.stringify({ aps: { alert: allClearText(regionId, lang) } });
+  return JSON.stringify({ aps: { alert: allClearText(regionId, lang), sound: "default" } });
 }

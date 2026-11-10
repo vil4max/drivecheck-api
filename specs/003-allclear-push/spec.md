@@ -115,6 +115,7 @@ When it is built\
 Then its title and body are, in the device's language, with the region's name in that language:
 en "All clear: {region}" / "The air alert has ended."; uk "Відбій тривоги: {region}" /
 "Повітряна тривога закінчилась."; ru "Отбой тревоги: {region}" / "Воздушная тревога окончена.";
+it plays the default sound (`"sound": "default"`, owner, 2026-11-10);
 it expires 5 minutes after it is sent (`apns-expiration`), and a queued push older than 5 minutes
 is deleted unsent
 
