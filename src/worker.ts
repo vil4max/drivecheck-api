@@ -8,6 +8,7 @@ import {
 } from "./coordinator.ts";
 import { type AlarmState, alarmAfterRegistration, runAlarm } from "./push/alarm.ts";
 import { type ApnsEnvVars, apnsSender, credentialsFrom, ProviderToken } from "./push/apns.ts";
+import { type LiveActivityRegistration, registerLiveActivity } from "./push/liveActivity.ts";
 import { type Registration, register } from "./push/registration.ts";
 import { PushStore, type SqlRunner } from "./push/registry.ts";
 import { sendBatch } from "./push/sender.ts";
@@ -75,6 +76,20 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
     this.push.deleteDevice(token);
   }
 
+  /** Spec 004: a Live Activity record arms the loop like a notice device does. */
+  async registerLiveActivity(registration: LiveActivityRegistration): Promise<204 | 503> {
+    const status = registerLiveActivity(this.push, registration, Date.now());
+    if (status === 204) {
+      const next = alarmAfterRegistration(await this.ctx.storage.getAlarm(), Date.now());
+      if (next !== null) await this.ctx.storage.setAlarm(next);
+    }
+    return status;
+  }
+
+  forgetLiveActivity(startToken: string): void {
+    this.push.deleteLiveActivity(startToken);
+  }
+
   /** The all-clear loop (spec 003): poll, detect, send, then schedule the next round or stop. */
   async alarm(): Promise<void> {
     const log = (message: string) => console.log(message);
@@ -129,6 +144,10 @@ export default {
       push: {
         register: (registration) => stub.registerDevice(registration),
         forget: (token) => stub.forgetDevice(token),
+      },
+      liveActivity: {
+        register: (registration) => stub.registerLiveActivity(registration),
+        forget: (startToken) => stub.forgetLiveActivity(startToken),
       },
     });
   },

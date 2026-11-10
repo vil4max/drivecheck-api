@@ -27,8 +27,8 @@ export interface OutboxItem {
  * SQLite, so the statements below run the same in both.
  */
 export interface SqlRunner {
-  all(query: string, ...params: (string | number)[]): Record<string, unknown>[];
-  run(query: string, ...params: (string | number)[]): void;
+  all(query: string, ...params: (string | number | null)[]): Record<string, unknown>[];
+  run(query: string, ...params: (string | number | null)[]): void;
   transaction<T>(work: () => T): T;
 }
 
@@ -53,9 +53,33 @@ const SCHEMA = [
   )`,
   // Single overwritten records (the region statuses), never a history.
   "CREATE TABLE IF NOT EXISTS push_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+  // Spec 004: one row per ActivityKit push-to-start token, apart from the notice devices.
+  `CREATE TABLE IF NOT EXISTS push_live_activities (
+    start_token TEXT PRIMARY KEY,
+    region TEXT NOT NULL,
+    env TEXT NOT NULL,
+    lang TEXT NOT NULL,
+    activity_token TEXT,
+    last_seen INTEGER NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS push_live_activities_region ON push_live_activities (region)",
+  "CREATE INDEX IF NOT EXISTS push_live_activities_seen ON push_live_activities (last_seen)",
 ];
 
 const DEVICE_COUNT_KEY = "deviceCount";
+const LIVE_ACTIVITY_COUNT_KEY = "liveActivityCount";
+
+/** Everything the server keeps about a Live Activity (REQ-PUSHAPI-009): six fields, nothing else. */
+export interface LiveActivityRow {
+  startToken: string;
+  /** A catalog region id (`kyiv-city`), not the app's code. */
+  region: string;
+  env: ApnsEnv;
+  lang: Lang;
+  /** The update token of the running activity, or null while none runs. */
+  activityToken: string | null;
+  lastSeen: number;
+}
 
 export class PushStore {
   constructor(private readonly sql: SqlRunner) {
@@ -119,6 +143,77 @@ export class PushStore {
     );
     this.sql.run("DELETE FROM push_devices WHERE last_seen < ?", before);
     this.adjustDeviceCount(-expired);
+  }
+
+  /** The number of Live Activity records, kept as a counter like `countDevices`. */
+  countLiveActivities(): number {
+    return Number(this.loadState(LIVE_ACTIVITY_COUNT_KEY) ?? 0);
+  }
+
+  private adjustLiveActivityCount(delta: number): void {
+    this.saveState(
+      LIVE_ACTIVITY_COUNT_KEY,
+      String(Math.max(0, this.countLiveActivities() + delta)),
+    );
+  }
+
+  liveActivity(startToken: string): LiveActivityRow | null {
+    const row = this.sql.all(
+      "SELECT * FROM push_live_activities WHERE start_token = ?",
+      startToken,
+    )[0];
+    if (row === undefined) return null;
+    return {
+      startToken: String(row.start_token),
+      region: String(row.region),
+      env: row.env as ApnsEnv,
+      lang: row.lang as Lang,
+      activityToken: row.activity_token === null ? null : String(row.activity_token),
+      lastSeen: Number(row.last_seen),
+    };
+  }
+
+  /** Stores or replaces a record; returns the one it replaced, if any. */
+  upsertLiveActivity(row: LiveActivityRow): LiveActivityRow | null {
+    const previous = this.liveActivity(row.startToken);
+    this.sql.run(
+      `INSERT INTO push_live_activities
+         (start_token, region, env, lang, activity_token, last_seen) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (start_token) DO UPDATE SET
+         region = excluded.region, env = excluded.env, lang = excluded.lang,
+         activity_token = excluded.activity_token, last_seen = excluded.last_seen`,
+      row.startToken,
+      row.region,
+      row.env,
+      row.lang,
+      row.activityToken,
+      row.lastSeen,
+    );
+    if (previous === null) this.adjustLiveActivityCount(1);
+    return previous;
+  }
+
+  /** Forgets a record and every push still queued for it. */
+  deleteLiveActivity(startToken: string): void {
+    if (this.liveActivity(startToken) === null) return;
+    this.sql.run("DELETE FROM push_outbox WHERE token = ?", startToken);
+    this.sql.run("DELETE FROM push_live_activities WHERE start_token = ?", startToken);
+    this.adjustLiveActivityCount(-1);
+  }
+
+  /** Deletes records last heard from before `before`, and their queued pushes. */
+  pruneLiveActivities(before: number): void {
+    const expired = Number(
+      this.sql.all("SELECT COUNT(*) AS n FROM push_live_activities WHERE last_seen < ?", before)[0]
+        ?.n ?? 0,
+    );
+    if (expired === 0) return;
+    this.sql.run(
+      "DELETE FROM push_outbox WHERE token IN (SELECT start_token FROM push_live_activities WHERE last_seen < ?)",
+      before,
+    );
+    this.sql.run("DELETE FROM push_live_activities WHERE last_seen < ?", before);
+    this.adjustLiveActivityCount(-expired);
   }
 
   loadState(key: string): string | null {

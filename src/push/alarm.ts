@@ -78,6 +78,7 @@ export async function runAlarm(deps: AlarmDeps, state: AlarmState): Promise<numb
   const now = deps.now();
   try {
     store.pruneDevices(now - DEVICE_EXPIRY_MS);
+    store.pruneLiveActivities(now - DEVICE_EXPIRY_MS);
     store.dropOutboxBefore(now - OUTBOX_TTL_MS);
     if (state.lastPollAt === null || now - state.lastPollAt >= POLL_MS) {
       if (store.countDevices() === 0) return null;

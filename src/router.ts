@@ -3,6 +3,11 @@ import type { CoordinatorView, MapImage } from "./coordinator.ts";
 import { PAGE_CSP } from "./csp.ts";
 import { LANGS, negotiateLanguage } from "./i18n.ts";
 import { renderOffline, renderPage } from "./page.ts";
+import {
+  type LiveActivityRegistration,
+  parseLiveActivity,
+  parseLiveActivityDeletion,
+} from "./push/liveActivity.ts";
 import { parseDeletion, parseRegistration, type Registration } from "./push/registration.ts";
 import { parseRegionCookie, regionCookie } from "./regionCookie.ts";
 import { DEFAULT_REGION, type Region, regionById, regionByIsoCode } from "./regions.ts";
@@ -19,6 +24,8 @@ export interface RouteInput {
   clock: () => number;
   /** The all-clear push registry (spec 003); without it the path is unknown. */
   push?: PushEndpoint;
+  /** The Live Activity records (spec 004); without them the path is unknown. */
+  liveActivity?: LiveActivityEndpoint;
 }
 
 export interface PushEndpoint {
@@ -26,13 +33,24 @@ export interface PushEndpoint {
   forget(token: string): Promise<void>;
 }
 
+export interface LiveActivityEndpoint {
+  register(registration: LiveActivityRegistration): Promise<204 | 503>;
+  forget(startToken: string): Promise<void>;
+}
+
 const PUSH_PATH = "/v1/push/registration";
+const LIVE_ACTIVITY_PATH = "/v1/push/live-activity";
 
 /**
- * `PUT` and `DELETE /v1/push/registration` (REQ-PUSHAPI-001). Only the app calls it, so the answer
- * opens no CORS access, and nothing about the request is logged.
+ * `PUT` and `DELETE` of one app record (REQ-PUSHAPI-001, REQ-PUSHAPI-008). Only the app calls
+ * them, so the answer opens no CORS access, and nothing about the request is logged.
  */
-async function pushRegistration(request: Request, push: PushEndpoint): Promise<Response> {
+async function appRecord<T>(
+  request: Request,
+  parse: (body: unknown) => T | null,
+  parseKey: (body: unknown) => string | null,
+  endpoint: { register(value: T): Promise<204 | 503>; forget(key: string): Promise<void> },
+): Promise<Response> {
   if (request.method !== "PUT" && request.method !== "DELETE") {
     return new Response(null, { status: 405, headers: { allow: "PUT, DELETE" } });
   }
@@ -43,14 +61,14 @@ async function pushRegistration(request: Request, push: PushEndpoint): Promise<R
     return new Response(null, { status: 400 });
   }
   if (request.method === "DELETE") {
-    const token = parseDeletion(body);
-    if (token === null) return new Response(null, { status: 400 });
-    await push.forget(token);
+    const key = parseKey(body);
+    if (key === null) return new Response(null, { status: 400 });
+    await endpoint.forget(key);
     return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
   }
-  const registration = parseRegistration(body);
-  if (registration === null) return new Response(null, { status: 400 });
-  const status = await push.register(registration);
+  const value = parse(body);
+  if (value === null) return new Response(null, { status: 400 });
+  const status = await endpoint.register(value);
   return new Response(null, { status, headers: { "cache-control": "no-store" } });
 }
 
@@ -129,10 +147,16 @@ export async function route({
   getMap,
   clock,
   push,
+  liveActivity,
 }: RouteInput): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/region" && request.method === "POST") return chooseRegion(request);
-  if (url.pathname === PUSH_PATH && push !== undefined) return pushRegistration(request, push);
+  if (url.pathname === PUSH_PATH && push !== undefined) {
+    return appRecord(request, parseRegistration, parseDeletion, push);
+  }
+  if (url.pathname === LIVE_ACTIVITY_PATH && liveActivity !== undefined) {
+    return appRecord(request, parseLiveActivity, parseLiveActivityDeletion, liveActivity);
+  }
   if (!["/", "/regions", "/offline", "/v1/alerts", "/v1/map"].includes(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }
