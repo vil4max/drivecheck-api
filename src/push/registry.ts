@@ -3,7 +3,7 @@ import type { Lang } from "../regions.ts";
 
 export type ApnsEnv = "production" | "sandbox";
 
-/** Everything the server keeps about a device (REQ-PUSHAPI-002): five fields, nothing else. */
+/** Everything the server keeps about a device (REQ-PUSHAPI-002): six fields, nothing else. */
 export interface DeviceRow {
   token: string;
   /** A catalog region id (`kyiv-city`), not the app's code. */
@@ -11,6 +11,8 @@ export interface DeviceRow {
   env: ApnsEnv;
   lang: Lang;
   lastSeen: number;
+  /** The app's urgent switch (spec 004 AC-12); absent is false. */
+  urgent?: boolean;
 }
 
 /** One push waiting to be sent, joined with its device's environment and language. */
@@ -27,6 +29,8 @@ export interface OutboxItem {
   env: ApnsEnv;
   lang: Lang;
   createdAt: number;
+  /** The device's urgent switch: its alert-start alerts are time-sensitive (AC-12). */
+  urgent: boolean;
   /** The feed state a Live Activity push carries. */
   snapshot?: Snapshot;
 }
@@ -71,7 +75,8 @@ const SCHEMA = [
     env TEXT NOT NULL,
     lang TEXT NOT NULL,
     activity_token TEXT,
-    last_seen INTEGER NOT NULL
+    last_seen INTEGER NOT NULL,
+    urgent INTEGER NOT NULL DEFAULT 0
   )`,
   "CREATE INDEX IF NOT EXISTS push_live_activities_region ON push_live_activities (region)",
   "CREATE INDEX IF NOT EXISTS push_live_activities_seen ON push_live_activities (last_seen)",
@@ -96,8 +101,18 @@ export const PUSH_LIFETIME_MS: Record<OutboxKind, number> = {
   "la-end": 4 * 3_600_000,
 };
 
-// Spec 004 adds `kind` to the spec 003 outbox; rows queued before it are all-clear pushes.
-const ADD_KIND = "ALTER TABLE push_outbox ADD COLUMN kind TEXT NOT NULL DEFAULT 'allclear'";
+/**
+ * Column changes to the spec 003 tables, applied once each and in order; the number reached is
+ * kept in `push_state`, since Durable Object SQLite has no `PRAGMA user_version` (Cloudflare,
+ * "Rules of Durable Objects", migrations).
+ */
+const MIGRATIONS = [
+  // Spec 004: rows queued before it are all-clear pushes.
+  "ALTER TABLE push_outbox ADD COLUMN kind TEXT NOT NULL DEFAULT 'allclear'",
+  // Spec 004 AC-12: the urgent switch; devices registered before it are not urgent.
+  "ALTER TABLE push_devices ADD COLUMN urgent INTEGER NOT NULL DEFAULT 0",
+];
+const SCHEMA_VERSION_KEY = "schemaVersion";
 
 const DEVICE_COUNT_KEY = "deviceCount";
 const LIVE_ACTIVITY_COUNT_KEY = "liveActivityCount";
@@ -112,16 +127,20 @@ export interface LiveActivityRow {
   /** The update token of the running activity, or null while none runs. */
   activityToken: string | null;
   lastSeen: number;
+  /** The app's urgent switch (spec 004 AC-12); absent is false. */
+  urgent?: boolean;
 }
 
 export class PushStore {
   constructor(private readonly sql: SqlRunner) {
     for (const statement of SCHEMA) sql.run(statement);
-    try {
-      sql.run(ADD_KIND);
-    } catch (error) {
-      // Every start after the first finds the column; anything else is a real failure.
-      if (!/duplicate column/i.test((error as Error).message)) throw error;
+    const done = Number(this.loadState(SCHEMA_VERSION_KEY) ?? 0);
+    for (let version = done; version < MIGRATIONS.length; version += 1) {
+      // Each step and its version mark commit together, so a failed start retries that step.
+      sql.transaction(() => {
+        sql.run(MIGRATIONS[version]!);
+        this.saveState(SCHEMA_VERSION_KEY, String(version + 1));
+      });
     }
   }
 
@@ -148,15 +167,17 @@ export class PushStore {
   upsertDevice(row: DeviceRow): void {
     const isNew = !this.hasDevice(row.token);
     this.sql.run(
-      `INSERT INTO push_devices (token, region, env, lang, last_seen) VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO push_devices (token, region, env, lang, last_seen, urgent)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (token) DO UPDATE SET
          region = excluded.region, env = excluded.env, lang = excluded.lang,
-         last_seen = excluded.last_seen`,
+         last_seen = excluded.last_seen, urgent = excluded.urgent`,
       row.token,
       row.region,
       row.env,
       row.lang,
       row.lastSeen,
+      row.urgent === true ? 1 : 0,
     );
     if (isNew) this.adjustDeviceCount(1);
   }
@@ -209,6 +230,7 @@ export class PushStore {
       lang: row.lang as Lang,
       activityToken: row.activity_token === null ? null : String(row.activity_token),
       lastSeen: Number(row.last_seen),
+      urgent: Number(row.urgent) === 1,
     };
   }
 
@@ -217,16 +239,19 @@ export class PushStore {
     const previous = this.liveActivity(row.startToken);
     this.sql.run(
       `INSERT INTO push_live_activities
-         (start_token, region, env, lang, activity_token, last_seen) VALUES (?, ?, ?, ?, ?, ?)
+         (start_token, region, env, lang, activity_token, last_seen, urgent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (start_token) DO UPDATE SET
          region = excluded.region, env = excluded.env, lang = excluded.lang,
-         activity_token = excluded.activity_token, last_seen = excluded.last_seen`,
+         activity_token = excluded.activity_token, last_seen = excluded.last_seen,
+         urgent = excluded.urgent`,
       row.startToken,
       row.region,
       row.env,
       row.lang,
       row.activityToken,
       row.lastSeen,
+      row.urgent === true ? 1 : 0,
     );
     if (previous === null) this.adjustLiveActivityCount(1);
     return previous;
@@ -330,8 +355,9 @@ export class PushStore {
     return this.sql
       .all(
         `SELECT o.id, o.kind, o.token AS key, o.region AS queued_region, o.created_at,
-                d.env AS d_env, d.lang AS d_lang,
-                l.env AS l_env, l.lang AS l_lang, l.region AS l_region, l.activity_token
+                d.env AS d_env, d.lang AS d_lang, d.urgent AS d_urgent,
+                l.env AS l_env, l.lang AS l_lang, l.region AS l_region, l.activity_token,
+                l.urgent AS l_urgent
          FROM push_outbox o
          LEFT JOIN push_devices d
            ON o.kind IN ('allclear', 'alertstart') AND d.token = o.token
@@ -355,6 +381,7 @@ export class PushStore {
           env: (notice ? row.d_env : row.l_env) as ApnsEnv,
           lang: (notice ? row.d_lang : row.l_lang) as Lang,
           createdAt: Number(row.created_at),
+          urgent: Number(notice ? row.d_urgent : row.l_urgent) === 1,
         };
       });
   }

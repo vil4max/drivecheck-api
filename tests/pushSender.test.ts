@@ -352,7 +352,7 @@ describe("sending all-clear pushes", () => {
     expect(store.hasOutbox()).toBe(false);
   });
 
-  test("REQ-PUSHAPI-002 a device keeps five fields for 60 days", async () => {
+  test("REQ-PUSHAPI-002 a device keeps six fields for 60 days", async () => {
     const { db, store } = memoryStore();
     const DAY = 86_400_000;
     const now = T0 + 60 * DAY;
@@ -377,6 +377,7 @@ describe("sending all-clear pushes", () => {
       "last_seen",
       "region",
       "token",
+      "urgent",
     ]);
 
     const logs: string[] = [];

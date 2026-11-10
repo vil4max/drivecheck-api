@@ -194,6 +194,7 @@ the server clears that `activity_token`.
 | AC-5 | `REQ-PUSH-008 nothing is sent on a stale, rate-limited or unknown feed` | 429 window open → nothing; region missing from the feed → nothing; stale clear → no `end` |
 | AC-10 | `REQ-PUSH-008 a region change moves the activity` | record holding a token moves Kharkiv → Lviv in alarm → one `update` titled "Lviv Oblast", phase `alarm`; moves to a clear region → one `end` titled with the new region, `quiet`; move without a token → nothing; move while the feed is stale → nothing |
 | AC-11 | `REQ-PUSHAPI-008 at most 5,000 records` | 5,000 stored, new start token → 503 and no row; known start token → 204 |
+| AC-12 | `REQ-PUSHAPI-013 urgent is a boolean or absent`, `REQ-PUSHAPI-013 urgent alerts break through Focus, the all-clear never does` | `urgent` true → stored 1, false → 0, absent → 0, a later PUT without it → 0; `"true"`, `1`, `0`, `null`, `{}` → 400, on both endpoints; devices and records with true, false, absent → alert start `time-sensitive`, `active`, `active`; the all-clear to the same three → never `time-sensitive`; every push `drivecheck.caf` |
 | AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "active"` and `"sound": "drivecheck.caf"`, never `time-sensitive` |
 | AC-6 | `REQ-PUSHAPI-010 the payloads decode as the app's content state` | `content-state` keys exactly {phase, regionTitle, checkedAt, sourceLabel, isStale}; `checkedAt` for 2026-11-10T00:00:00Z = 815,961,600; `timestamp` = 1,794,268,800 for the same instant; headers `liveactivity`, topic `vil4max.RegionalCheck.push-type.liveactivity`; `start` has `attributes-type`, `attributes: {}`, `input-push-token: 1`, `alert`; every payload ≤ 4096 bytes; `source` "Mørk Skogen" → "Alert feed", "fixture" → "External feed" |
 | AC-7 | `REQ-PUSHAPI-009 a record keeps six fields for 60 days` | row keys exactly the six; 60 d − 1 ms kept, 60 d + 1 ms pruned with its outbox rows; captured logs contain neither token |
@@ -386,6 +387,14 @@ Questions for the owner beyond the critic, neutral order of options, the agent's
   - Decision: accepted, 5,000, revisited after Group 0 (owner, 2026-11-10).
 - P9 The fan-out option A, B or C (Approach). Agent's lean: B.
   - Decision: B (owner, 2026-11-10).
+- P10 Added by the owner after the calm-push change (2026-11-10): an in-app switch, off by
+  default, lets a driver choose to have alerts break through Focus.
+  - Decision (owner, 2026-11-10): an optional `urgent` boolean in both PUT bodies, stored with the
+    record, absent meaning false so older builds keep working, any other value refused with 400;
+    with it on, that device's alert-start notice and Live Activity `start` alert are
+    time-sensitive, otherwise active; the all-clear stays active for everyone, and the sound is
+    `drivecheck.caf` in every case. Spec AC-12 and REQ-PUSHAPI-013; the app adds the field on its
+    side.
 
 How the decisions shape the build (Stage 2):
 - The all-clear `end` needs no confirmed change: each fresh, newly processed snapshot queues one

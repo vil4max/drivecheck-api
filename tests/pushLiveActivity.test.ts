@@ -58,6 +58,7 @@ describe("PUT and DELETE /v1/push/live-activity", () => {
         lang: "uk",
         activity_token: null,
         last_seen: T0,
+        urgent: 0,
       },
     ]);
     // A Live Activity record is not a notice registration.
@@ -135,7 +136,7 @@ describe("PUT and DELETE /v1/push/live-activity", () => {
 });
 
 describe("the Live Activity record", () => {
-  test("REQ-PUSHAPI-009 a record keeps six fields for 60 days", async () => {
+  test("REQ-PUSHAPI-009 a record keeps seven fields for 60 days", async () => {
     const { db, store } = memoryStore();
     const now = T0 + 60 * DAY;
     const record = (startToken: string, lastSeen: number) => ({
@@ -155,6 +156,7 @@ describe("the Live Activity record", () => {
       "last_seen",
       "region",
       "start_token",
+      "urgent",
     ]);
     expect(store.countLiveActivities()).toBe(2);
 

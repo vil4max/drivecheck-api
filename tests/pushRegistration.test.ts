@@ -42,7 +42,14 @@ describe("PUT /v1/push/registration", () => {
     expect(await ok.text()).toBe("");
     expect(ok.headers.get("access-control-allow-origin")).toBeNull();
     expect(db.prepare("SELECT * FROM push_devices").all()).toEqual([
-      { token: TOKEN_A, region: "kharkiv", env: "production", lang: "uk", last_seen: T0 },
+      {
+        token: TOKEN_A,
+        region: "kharkiv",
+        env: "production",
+        lang: "uk",
+        last_seen: T0,
+        urgent: 0,
+      },
     ]);
 
     // The weekly re-send and a region change: still one row, region and last-seen refreshed.

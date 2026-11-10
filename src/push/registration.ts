@@ -8,6 +8,8 @@ export interface Registration {
   region: string;
   env: ApnsEnv;
   lang: Lang;
+  /** The app's urgent switch (spec 004 AC-12); absent in the body means false. */
+  urgent: boolean;
 }
 
 /** Above it a new token is refused with 503 (owner decision at the plan gate, 2026-11-09). */
@@ -15,7 +17,7 @@ export const MAX_DEVICES = 10_000;
 
 /** An APNs device token as the app sends it: hex digits only. */
 const TOKEN = /^[0-9a-f]{1,200}$/i;
-const ENVS: readonly ApnsEnv[] = ["production", "sandbox"];
+export const ENVS: readonly ApnsEnv[] = ["production", "sandbox"];
 
 // The app sends its `AlertRegion` raw values (`kyivCity`); the catalog ids are their kebab form.
 const appCode = (id: string) =>
@@ -26,28 +28,58 @@ export function regionFromAppCode(code: string): Region | undefined {
   return byAppCode.get(code);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const hasExactly = (body: Record<string, unknown>, keys: string[]) =>
   Object.keys(body).length === keys.length && keys.every((key) => key in body);
 
-function parseToken(value: unknown): string | null {
+/** Every `required` key, any of `optional`, and nothing else. */
+export function hasFields(
+  body: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[],
+): boolean {
+  return (
+    required.every((key) => key in body) &&
+    Object.keys(body).every((key) => required.includes(key) || optional.includes(key))
+  );
+}
+
+export function parseToken(value: unknown): string | null {
   return typeof value === "string" && TOKEN.test(value) ? value.toLowerCase() : null;
 }
 
-/** REQ-PUSHAPI-001: exactly `token`, `region`, `env` and `lang`, each valid, or nothing. */
+/** The urgent switch: a boolean, or absent for false; anything else is invalid (null). */
+export function parseUrgent(body: Record<string, unknown>): boolean | null {
+  if (!("urgent" in body)) return false;
+  return typeof body.urgent === "boolean" ? body.urgent : null;
+}
+
+/**
+ * REQ-PUSHAPI-001: exactly `token`, `region`, `env` and `lang`, plus at most `urgent`
+ * (REQ-PUSHAPI-013), each valid, or nothing.
+ */
 export function parseRegistration(body: unknown): Registration | null {
-  if (!isRecord(body) || !hasExactly(body, ["token", "region", "env", "lang"])) return null;
+  if (!isRecord(body) || !hasFields(body, ["token", "region", "env", "lang"], ["urgent"])) {
+    return null;
+  }
   const token = parseToken(body.token);
   const region = typeof body.region === "string" ? regionFromAppCode(body.region) : undefined;
   const env = ENVS.find((candidate) => candidate === body.env);
   const lang = LANGS.find((candidate) => candidate === body.lang);
-  if (token === null || region === undefined || env === undefined || lang === undefined) {
+  const urgent = parseUrgent(body);
+  if (
+    token === null ||
+    region === undefined ||
+    env === undefined ||
+    lang === undefined ||
+    urgent === null
+  ) {
     return null;
   }
-  return { token, region: region.id, env, lang };
+  return { token, region: region.id, env, lang, urgent };
 }
 
 export function parseDeletion(body: unknown): string | null {

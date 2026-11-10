@@ -37,7 +37,8 @@ Numbered as in the app's spec (`regional-check` `specs/ALLCLEAR-push/spec.md`), 
 - **AC-5** Given one change touches more devices than one invocation may send, then following
   invocations send the rest, each within 50 subrequests, and no device gets two pushes for one change.
 - **AC-6** The server stores per device only the token, the region code, the APNs environment, the
-  language and the time it last heard from the device; it drops a device not heard from for 60
+  language, the urgent switch (since spec 004) and the time it last heard from the device; it drops
+  a device not heard from for 60
   days, logs no token, and keeps no alert history.
 - **AC-7** The notification text exists in English, Ukrainian and Russian.
 - **AC-8** (server only) The alarm polls the feed every 30 s only while at least one device is
@@ -48,7 +49,8 @@ Numbered as in the app's spec (`regional-check` `specs/ALLCLEAR-push/spec.md`), 
 - `PUT /v1/push/registration`, JSON body `{"token","region","env","lang"}`: `token` hex,
   `region` an iOS `AlertRegion` raw value (`kyivCity`, `ivanoFrankivsk`, ...), `env`
   `production|sandbox`, `lang` `en|uk|ru`. Answer 204. The same token again replaces its record and
-  refreshes its last-seen time.
+  refreshes its last-seen time. Since spec 004 the body may also carry `"urgent"`, a boolean,
+  absent meaning false.
 - `DELETE /v1/push/registration`, JSON body `{"token"}`. Answer 204, also for an unknown token.
 - Any other body: 400; any other method on the path: 405.
 
@@ -69,18 +71,19 @@ cold start or a longer gap sends nothing (REQ-SURF-009)
 Status: approved (owner, 2026-11-09)
 
 Given a request to `/v1/push/registration`\
-When it is a `PUT` with exactly the four valid fields, or a `DELETE` with a token\
+When it is a `PUT` with exactly the four valid fields (plus, since spec 004, an optional `urgent`
+boolean, REQ-PUSHAPI-013), or a `DELETE` with a token\
 Then the server stores or replaces, or deletes, that one device record and answers 204; a body with
 a missing, extra or invalid field answers 400 and stores nothing; the response opens no CORS access
 
-### REQ-PUSHAPI-002 — Only five fields, 60 days
+### REQ-PUSHAPI-002 — Only six fields, 60 days
 
-Status: approved (owner, 2026-11-09)
+Status: approved (owner, 2026-11-09; the urgent switch added 2026-11-10, spec 004)
 
 Given the server keeps a device\
 When it stores or logs anything about it\
-Then the record holds only token, region, environment, language and last-seen time, a record not
-refreshed for 60 days is deleted, and no log line contains a token
+Then the record holds only token, region, environment, language, the urgent switch and last-seen
+time, a record not refreshed for 60 days is deleted, and no log line contains a token
 
 ### REQ-PUSHAPI-003 — Polling only while needed
 

@@ -131,6 +131,8 @@ export async function sendUpdates(
         env: row.env,
         lang: row.lang,
         createdAt: 0,
+        // An update carries no alert, so the switch does not apply.
+        urgent: false,
         snapshot: latest,
       });
     }
