@@ -19,9 +19,10 @@ notices; Live Activity tokens go to the server whenever
 Live Activities are on, keyed by the push-to-start token, whatever the notice switch; the alert-start
 wording "Air raid alert: <region>" in three languages; a stale date 15 minutes after the check; the
 green activity is removed 5 minutes after the all-clear. Later the same day he decided that the
-pushes are calm and informational, not alarming: the normal interruption level and a short, calm
-custom sound for every push (this replaces his earlier choice of a time-sensitive alert-start
-notice).
+pushes are calm and informational: a short, calm custom sound for every push. Whether an alert
+start breaks through Focus is the user's choice in the system settings, not an app switch: the
+alert-start notice and the Live Activity start alert are time-sensitive, and the user can turn
+Time Sensitive Notifications off for the app in Settings; the all-clear stays at the normal level.
 
 ## Goal
 
@@ -36,7 +37,7 @@ and at the all-clear the existing notice plus a green activity that leaves the L
 Numbered for the server; the app's criteria they serve are in brackets.
 
 - **AC-1** [app AC-2, AC-9] `PUT /v1/push/live-activity` with exactly `startToken`, `region`,
-  `env`, `lang`, an optional `activityToken` and an optional `urgent` (AC-12), each valid, stores or replaces the one record keyed
+  `env`, `lang` and an optional `activityToken`, each valid, stores or replaces the one record keyed
   by `startToken` and answers 204; `DELETE /v1/push/live-activity` with `{"startToken"}` deletes it
   and answers 204, also for an unknown token. Any other body answers 400 and stores nothing; any
   other method answers 405. The record is independent of `/v1/push/registration`.
@@ -58,7 +59,7 @@ Numbered for the server; the app's criteria they serve are in brackets.
 - **AC-6** [app AC-8] The alert-start notice and the Live Activity alert exist in English, Ukrainian
   and Russian, and `regionTitle` is the app's region name in the record's language.
 - **AC-7** The Live Activity record holds only the start token, the region code, the APNs
-  environment, the language, the optional activity token, the urgent switch and the time the server
+  environment, the language, the optional activity token and the time the server
   last heard from it;
   it is deleted after 60 days without contact; no log line contains a token.
 - **AC-8** APNs answers are handled per token: a start token that APNs calls gone or bad deletes its
@@ -74,26 +75,23 @@ Numbered for the server; the app's criteria they serve are in brackets.
   up once the feed is fresh.
 - **AC-11** At most 5,000 Live Activity records are kept; a new start token above the cap answers
   503 and stores nothing; a known start token still refreshes.
-- **AC-12** Both `PUT /v1/push/registration` and `PUT /v1/push/live-activity` accept an optional
-  `"urgent"` boolean, the app's switch (off by default) to let alerts break through Focus; it is
-  stored with the record, absent means false, and any other value answers 400. A device with
-  `urgent` true gets its alert-start notice and its Live Activity `start` alert with
-  `"interruption-level": "time-sensitive"`; every other device gets `active`. The all-clear is
-  `active` for everyone, and every push plays `drivecheck.caf`.
+- **AC-12** Every alert-start notice and every Live Activity `start` alert carries
+  `"interruption-level": "time-sensitive"`; the all-clear is `active`, an update carries no alert, nothing is
+  `critical`, and every push plays `drivecheck.caf`. Neither PUT body takes an `urgent` key: a body
+  with one answers 400, like any other unknown key.
 
 ## API contract (from the app's code at 504d252)
 
 - `PUT /v1/push/live-activity`, JSON body
-  `{"startToken","region","env","lang"[,"activityToken"][,"urgent"]}`: both tokens lowercase hex, `region` an iOS
+  `{"startToken","region","env","lang"[,"activityToken"]}`: both tokens lowercase hex, `region` an iOS
   `AlertRegion` raw value (`kyivCity`, ...), `env` `production|sandbox`, `lang` `en|uk|ru`;
   `activityToken` is absent when the app holds no activity (Swift's synthesized `Codable` omits a
   `nil` optional). The app sends it again whenever a field changes and at least every 7 days. Any
   2xx is success for the app; the server answers 204.
 - `DELETE /v1/push/live-activity`, JSON body `{"startToken"}`. Answer 204.
 - The app sends a new start token as a PUT of the new record followed by a DELETE of the old one.
-- Both PUT bodies (`/v1/push/live-activity` and spec 003's `/v1/push/registration`) take an
-  optional `"urgent"` boolean (owner, 2026-11-10; the app adds it on its side): absent is false,
-  so builds without the switch keep working; any other value answers 400.
+- Neither PUT body takes an `urgent` key (owner, 2026-11-10): Focus breakthrough follows the
+  system's Time Sensitive Notifications setting, so the app has no switch of its own.
 
 ## APNs payloads (from the app's spec and plan, checked against Apple's documentation in the plan)
 
@@ -112,9 +110,8 @@ seconds since 2001-01-01 00:00 UTC; `timestamp`, `stale-date` and `dismissal-dat
   final content, in one step, with no `update` before it), `dismissal-date` = now + 300 s.
 - The alert-start notice (to the notice token, `apns-push-type: alert`, topic `APNS_TOPIC`):
   `aps.alert` with the alert-start title only, `aps.sound` `drivecheck.caf`,
-  `aps."interruption-level"` `active`, or `time-sensitive` for a device whose `urgent` switch is on
-  (AC-12); never `critical`. The Live Activity `start` alert is the same title with the same sound
-  and the same interruption level for its record. Every push
+  `aps."interruption-level"` `time-sensitive` (AC-12); never `critical`. The Live Activity `start`
+  alert is the same title with the same sound and the same interruption level. Every push
   of this server plays `drivecheck.caf`, a short, calm sound the app bundles; iOS plays the default
   sound while a build lacks the file.
 - Lifetimes (`apns-expiration`, and the time a queued push may wait): 5 minutes for the notice,
@@ -139,20 +136,20 @@ it ends in green with a dismissal 5 minutes later; a stale, failing or unknown f
 Status: approved (owner, 2026-11-10)
 
 Given a request to `/v1/push/live-activity`\
-When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`
-and `urgent` (REQ-PUSHAPI-013), each valid, or a `DELETE` with a start token\
+When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`,
+each valid, or a `DELETE` with a start token\
 Then the server stores or replaces, or deletes, that one record and answers 204; any other body
 answers 400 and stores nothing, any other method 405, a new start token above 5,000 records 503,
 and the response opens no CORS access
 
-### REQ-PUSHAPI-009 — Seven fields, 60 days
+### REQ-PUSHAPI-009 — Six fields, 60 days
 
 Status: approved (owner, 2026-11-10)
 
 Given the server keeps a Live Activity record\
 When it stores or logs anything about it\
-Then the record holds only start token, region, environment, language, optional activity token,
-the urgent switch and last-seen time, a record not refreshed for 60 days is deleted, and no log
+Then the record holds only start token, region, environment, language, optional activity token
+and last-seen time, a record not refreshed for 60 days is deleted, and no log
 line contains a token
 
 ### REQ-PUSHAPI-010 — Live Activity payloads
@@ -182,18 +179,17 @@ Given an alert-start notice or a Live Activity `start` for a region\
 When it is built\
 Then its title is, in the device's language, with the region's name in that language: en "Air raid
 alert: {region}"; uk "Повітряна тривога: {region}"; ru "Воздушная тревога: {region}"; it has no
-body, plays `drivecheck.caf` and uses the `active` interruption level, or `time-sensitive` when
-the device's urgent switch is on (REQ-PUSHAPI-013)
+body, plays `drivecheck.caf` and uses the `time-sensitive` interruption level (REQ-PUSHAPI-013)
 
-### REQ-PUSHAPI-013 — The urgent switch
+### REQ-PUSHAPI-013 — Alert starts break through Focus
 
-Status: approved (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10; revised the same day: no app switch)
 
-Given a PUT to `/v1/push/registration` or `/v1/push/live-activity`\
-When its body has `"urgent"` true, false or no `urgent` key\
-Then the record stores it (absent as false) and a body whose `urgent` is anything else answers
-400; a device with `urgent` true gets its alert-start notice and its Live Activity `start` alert
-time-sensitive, every other device `active`, and the all-clear is `active` for everyone
+Given an alert-start notice, a Live Activity `start` or an all-clear\
+When it is built, or a PUT to `/v1/push/registration` or `/v1/push/live-activity` carries an
+`urgent` key\
+Then the alert-start notice and the `start` alert are `time-sensitive`, the all-clear is
+`active`, nothing is `critical`, and the PUT answers 400 and stores nothing
 
 ## Out of scope
 

@@ -8,8 +8,6 @@ export interface Registration {
   region: string;
   env: ApnsEnv;
   lang: Lang;
-  /** The app's urgent switch (spec 004 AC-12); absent in the body means false. */
-  urgent: boolean;
 }
 
 /** Above it a new token is refused with 503 (owner decision at the plan gate, 2026-11-09). */
@@ -51,35 +49,22 @@ export function parseToken(value: unknown): string | null {
   return typeof value === "string" && TOKEN.test(value) ? value.toLowerCase() : null;
 }
 
-/** The urgent switch: a boolean, or absent for false; anything else is invalid (null). */
-export function parseUrgent(body: Record<string, unknown>): boolean | null {
-  if (!("urgent" in body)) return false;
-  return typeof body.urgent === "boolean" ? body.urgent : null;
-}
-
 /**
- * REQ-PUSHAPI-001: exactly `token`, `region`, `env` and `lang`, plus at most `urgent`
- * (REQ-PUSHAPI-013), each valid, or nothing.
+ * REQ-PUSHAPI-001: exactly `token`, `region`, `env` and `lang`, each valid, or nothing; an
+ * `urgent` key is refused like any other (REQ-PUSHAPI-013).
  */
 export function parseRegistration(body: unknown): Registration | null {
-  if (!isRecord(body) || !hasFields(body, ["token", "region", "env", "lang"], ["urgent"])) {
+  if (!isRecord(body) || !hasExactly(body, ["token", "region", "env", "lang"])) {
     return null;
   }
   const token = parseToken(body.token);
   const region = typeof body.region === "string" ? regionFromAppCode(body.region) : undefined;
   const env = ENVS.find((candidate) => candidate === body.env);
   const lang = LANGS.find((candidate) => candidate === body.lang);
-  const urgent = parseUrgent(body);
-  if (
-    token === null ||
-    region === undefined ||
-    env === undefined ||
-    lang === undefined ||
-    urgent === null
-  ) {
+  if (token === null || region === undefined || env === undefined || lang === undefined) {
     return null;
   }
-  return { token, region: region.id, env, lang, urgent };
+  return { token, region: region.id, env, lang };
 }
 
 export function parseDeletion(body: unknown): string | null {

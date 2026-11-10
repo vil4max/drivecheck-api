@@ -30,7 +30,7 @@ function addRecord(
 ) {
   registerLiveActivity(
     store,
-    { startToken, region, env: "production", lang: "en", activityToken, urgent: false },
+    { startToken, region, env: "production", lang: "en", activityToken },
     now,
   );
 }
@@ -242,10 +242,10 @@ describe("edges of the Live Activity loop", () => {
     // A second start finds the migrations done and changes nothing.
     const { store } = storeOn(db);
     expect(db.prepare("SELECT value FROM push_state WHERE key = 'schemaVersion'").all()).toEqual([
-      { value: "2" },
+      { value: "1" },
     ]);
     expect(db.prepare("SELECT kind FROM push_outbox").all()).toEqual([{ kind: "allclear" }]);
-    expect(db.prepare("SELECT urgent FROM push_devices").all()).toEqual([{ urgent: 0 }]);
+    expect(Object.keys(db.prepare("SELECT * FROM push_devices").all()[0]!)).not.toContain("urgent");
 
     const bodies: string[] = [];
     const send = apnsSender(

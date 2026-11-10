@@ -2,16 +2,9 @@ import type { Snapshot } from "../feed.ts";
 import { LANGS } from "../i18n.ts";
 import type { Lang } from "../regions.ts";
 import { checkedAt } from "../status.ts";
-import {
-  ENVS,
-  hasFields,
-  isRecord,
-  parseToken,
-  parseUrgent,
-  regionFromAppCode,
-} from "./registration.ts";
+import { ENVS, hasFields, isRecord, parseToken, regionFromAppCode } from "./registration.ts";
 import type { ApnsEnv, LiveActivityRow, PushStore } from "./registry.ts";
-import { alertStartTitle, interruptionLevel, PUSH_SOUND, regionName, sourceLabel } from "./text.ts";
+import { ALERT_START_LEVEL, alertStartTitle, PUSH_SOUND, regionName, sourceLabel } from "./text.ts";
 
 /** Seconds from 1970-01-01 to 2001-01-01, Foundation's reference date. */
 const REFERENCE_DATE_S = 978_307_200;
@@ -39,13 +32,7 @@ function contentState(regionId: string, lang: Lang, snapshot: Snapshot, phase: P
 const unixSeconds = (ms: number) => Math.floor(ms / 1000);
 
 /** `start` to a push-to-start token: red, with the alert-start title and a new update token. */
-export function startPayload(
-  regionId: string,
-  lang: Lang,
-  snapshot: Snapshot,
-  now: number,
-  urgent = false,
-) {
+export function startPayload(regionId: string, lang: Lang, snapshot: Snapshot, now: number) {
   return JSON.stringify({
     aps: {
       event: "start",
@@ -54,7 +41,7 @@ export function startPayload(
       attributes: {},
       "input-push-token": 1,
       "stale-date": unixSeconds(checkedAt(snapshot)) + STALE_AFTER_S,
-      "interruption-level": interruptionLevel(urgent),
+      "interruption-level": ALERT_START_LEVEL,
       alert: { title: alertStartTitle(regionId, lang), sound: PUSH_SOUND },
       "content-state": contentState(regionId, lang, snapshot, "alarm"),
     },
@@ -92,8 +79,6 @@ export interface LiveActivityRegistration {
   env: ApnsEnv;
   lang: Lang;
   activityToken: string | null;
-  /** The app's urgent switch (spec 004 AC-12); absent in the body means false. */
-  urgent: boolean;
 }
 
 /** Above it a new start token is refused with 503 (owner, 2026-11-10; revisited after Group 0). */
@@ -101,13 +86,13 @@ export const MAX_LIVE_ACTIVITIES = 5_000;
 
 /**
  * REQ-PUSHAPI-008: exactly `startToken`, `region`, `env` and `lang`, plus at most
- * `activityToken` and `urgent` (REQ-PUSHAPI-013), each valid. The app omits `activityToken` while
- * it holds no activity; `null` is refused.
+ * `activityToken`, each valid; any other key, `urgent` included (REQ-PUSHAPI-013), is refused.
+ * The app omits `activityToken` while it holds no activity; `null` is refused.
  */
 export function parseLiveActivity(body: unknown): LiveActivityRegistration | null {
   if (
     !isRecord(body) ||
-    !hasFields(body, ["startToken", "region", "env", "lang"], ["activityToken", "urgent"])
+    !hasFields(body, ["startToken", "region", "env", "lang"], ["activityToken"])
   ) {
     return null;
   }
@@ -117,18 +102,16 @@ export function parseLiveActivity(body: unknown): LiveActivityRegistration | nul
   const region = typeof body.region === "string" ? regionFromAppCode(body.region) : undefined;
   const env = ENVS.find((candidate) => candidate === body.env);
   const lang = LANGS.find((candidate) => candidate === body.lang);
-  const urgent = parseUrgent(body);
   if (
     startToken === null ||
     (hasActivity && activityToken === null) ||
     region === undefined ||
     env === undefined ||
-    lang === undefined ||
-    urgent === null
+    lang === undefined
   ) {
     return null;
   }
-  return { startToken, region: region.id, env, lang, activityToken, urgent };
+  return { startToken, region: region.id, env, lang, activityToken };
 }
 
 export function parseLiveActivityDeletion(body: unknown): string | null {

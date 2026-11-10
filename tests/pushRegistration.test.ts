@@ -48,7 +48,6 @@ describe("PUT /v1/push/registration", () => {
         env: "production",
         lang: "uk",
         last_seen: T0,
-        urgent: 0,
       },
     ]);
 

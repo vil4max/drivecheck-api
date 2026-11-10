@@ -27,13 +27,11 @@ export function allClearText(regionId: string, lang: Lang): AllClearText {
  */
 export const PUSH_SOUND = "drivecheck.caf";
 /**
- * Pushes inform, never alarm: the normal level for everyone (owner, 2026-11-10). Only a driver who
- * turned the app's urgent switch on gets the alert start through Focus (spec 004 AC-12); the
- * all-clear never does, and nothing is ever `critical`.
+ * An alert start reaches the driver through Focus unless the user turned Time Sensitive
+ * Notifications off for the app in Settings (owner, 2026-11-10); the all-clear and the updates
+ * stay `active`, and nothing is ever `critical` (spec 004 AC-12).
  */
-export function interruptionLevel(urgent: boolean): "active" | "time-sensitive" {
-  return urgent ? "time-sensitive" : "active";
-}
+export const ALERT_START_LEVEL = "time-sensitive";
 
 /** The APNs payload: the alert with the Drive Check sound, nothing else. */
 export function allClearPayload(regionId: string, lang: Lang): string {
@@ -51,13 +49,13 @@ export function alertStartTitle(regionId: string, lang: Lang): string {
   return ALERT_START[lang](regionName(regionId, lang));
 }
 
-/** The alert-start notice: title only, the Drive Check sound, the device's interruption level. */
-export function alertStartPayload(regionId: string, lang: Lang, urgent = false): string {
+/** The alert-start notice: title only, the Drive Check sound, time-sensitive. */
+export function alertStartPayload(regionId: string, lang: Lang): string {
   return JSON.stringify({
     aps: {
       alert: { title: alertStartTitle(regionId, lang) },
       sound: PUSH_SOUND,
-      "interruption-level": interruptionLevel(urgent),
+      "interruption-level": ALERT_START_LEVEL,
     },
   });
 }

@@ -28,7 +28,7 @@ describe("Live Activity payloads", () => {
         attributes: {},
         "input-push-token": 1,
         "stale-date": 1_794_268_800 + 900,
-        "interruption-level": "active",
+        "interruption-level": "time-sensitive",
         alert: { title: "Повітряна тривога: Харківська область", sound: "drivecheck.caf" },
         "content-state": {
           phase: "alarm",
@@ -107,7 +107,7 @@ describe("the alert-start notice", () => {
       aps: {
         alert: { title: "Air raid alert: Lviv Oblast" },
         sound: "drivecheck.caf",
-        "interruption-level": "active",
+        "interruption-level": "time-sensitive",
       },
     });
     for (const region of REGIONS) {

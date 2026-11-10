@@ -176,7 +176,7 @@ describe("sending all-clear pushes", () => {
     }
     store.enqueue("kharkiv", "kharkiv@1", T0);
     store.enqueue("lviv", "lviv@1", T0);
-    // The alert-start notice too (spec 004): calm, never time-sensitive or critical.
+    // The alert-start notice too (spec 004): the same sound, time-sensitive, never critical.
     store.enqueue("lviv", "start:lviv@1", T0, "alertstart");
     const apns = fakeApns();
     const { credentials } = await testCredentials();
@@ -186,8 +186,13 @@ describe("sending all-clear pushes", () => {
     for (const push of apns.sent) {
       const { aps } = JSON.parse(push.body);
       expect(aps.sound).toBe("drivecheck.caf");
-      expect(aps["interruption-level"] ?? "active").toBe("active");
+      // The alert-start notice is title only; the all-clear has a body and stays calm.
+      const level = aps.alert.body === undefined ? "time-sensitive" : "active";
+      expect(aps["interruption-level"] ?? "active").toBe(level);
     }
+    expect(apns.sent.filter((p) => JSON.parse(p.body).aps.alert.body === undefined)).toHaveLength(
+      10,
+    );
   });
 
   test("REQ-PUSHAPI-005 APNs answers decide what is deleted", async () => {
@@ -352,7 +357,7 @@ describe("sending all-clear pushes", () => {
     expect(store.hasOutbox()).toBe(false);
   });
 
-  test("REQ-PUSHAPI-002 a device keeps six fields for 60 days", async () => {
+  test("REQ-PUSHAPI-002 a device keeps five fields for 60 days", async () => {
     const { db, store } = memoryStore();
     const DAY = 86_400_000;
     const now = T0 + 60 * DAY;
@@ -377,7 +382,6 @@ describe("sending all-clear pushes", () => {
       "last_seen",
       "region",
       "token",
-      "urgent",
     ]);
 
     const logs: string[] = [];

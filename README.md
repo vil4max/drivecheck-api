@@ -21,16 +21,16 @@ clients and serves them as:
   cookie, else the region of the visitor's network, else Kyiv;
 - `GET /offline?lang=`: the Unavailable page the service worker shows offline before any status
   was saved;
-- `PUT /v1/push/registration` (`{"token","region","env","lang"[,"urgent"]}`) and `DELETE
+- `PUT /v1/push/registration` (`{"token","region","env","lang"}`) and `DELETE
   /v1/push/registration` (`{"token"}`), both 204: the iOS app's opt-in for the all-clear push
   ([spec 003](specs/003-allclear-push/spec.md)). While a device is registered, a Durable Object
   alarm reads the feed every 30 s, and when a region's alarm confirmed at most 10 minutes earlier
   turns clear in a fresh answer, each device of that region gets one notification through APNs;
   when a region's clear status confirmed at most 10 minutes earlier turns to alarm, it gets the
-  alert-start notification. Notifications are calm: the normal interruption level and the app's
-  own short sound; only a driver who turns the app's `urgent` switch on gets the alert start
-  through Focus (time-sensitive), never the all-clear;
-- `PUT /v1/push/live-activity` (`{"startToken","region","env","lang"[,"activityToken"][,"urgent"]}`) and
+  alert-start notification. Every notification plays the app's own short, calm sound; the alert
+  start is time-sensitive, so it reaches the driver through Focus unless Time Sensitive
+  Notifications are off for the app in Settings, and the all-clear is not;
+- `PUT /v1/push/live-activity` (`{"startToken","region","env","lang"[,"activityToken"]}`) and
   `DELETE /v1/push/live-activity` (`{"startToken"}`), both 204: the iOS app's Live Activity tokens
   ([spec 004](specs/004-alert-push-live-activity/spec.md)), kept whatever the notification switch.
   The same alarm starts the Live Activity in red at a confirmed alert start, updates it every
@@ -61,13 +61,11 @@ accounts, no ads, no analytics, and nothing stored or logged about web visitors 
 region choice and the offline copy stay in the visitor's browser. One exception, approved on
 2026-11-09 for the all-clear push ([spec 003](specs/003-allclear-push/spec.md)): for an iPhone whose
 driver switched the push on, the server keeps the push token, the region code, the APNs environment,
-the language, the urgent switch and the time it last heard from the device, deletes them when the
-driver switches the
+the language and the time it last heard from the device, deletes them when the driver switches the
 push off or after 60 days without contact, and never logs a token. A second exception, approved
 on 2026-11-10 ([spec 004](specs/004-alert-push-live-activity/spec.md)): for an iPhone with Live
 Activities on, the server keeps the Live Activity start token, the update token of the running
-activity, the region code, the APNs environment, the language, the urgent switch and the
-last-contact time, under
+activity, the region code, the APNs environment, the language and the last-contact time, under
 the same deletion rules. Alert data is informational only; do not rely on it for critical
 decisions.
 

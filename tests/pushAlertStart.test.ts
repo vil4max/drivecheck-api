@@ -29,7 +29,7 @@ function addRecord(
 ) {
   registerLiveActivity(
     store,
-    { startToken, region, env: "production", lang: "en", activityToken, urgent: false },
+    { startToken, region, env: "production", lang: "en", activityToken },
     now,
   );
 }

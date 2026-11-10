@@ -47,7 +47,7 @@ function addRecord(
 ) {
   registerLiveActivity(
     store,
-    { startToken, region, env: "production", lang: "en", activityToken, urgent: false },
+    { startToken, region, env: "production", lang: "en", activityToken },
     now,
   );
 }
@@ -145,7 +145,7 @@ describe("sending Live Activity pushes", () => {
     expect(notice.headers["apns-push-type"]).toBe("alert");
     expect(notice.headers["apns-topic"]).toBe(TOPIC);
     expect(notice.headers["apns-expiration"]).toBe(String(unix(T0 + 30_000) + 300));
-    expect(notice.aps["interruption-level"]).toBe("active");
+    expect(notice.aps["interruption-level"]).toBe("time-sensitive");
     expect(notice.aps.sound).toBe("drivecheck.caf");
     const start = h.sent.find((s) => s.token === S1)!;
     expect(start.headers["apns-push-type"]).toBe("liveactivity");

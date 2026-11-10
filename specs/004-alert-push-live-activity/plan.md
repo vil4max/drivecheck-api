@@ -12,7 +12,7 @@ only, no production code; the owner's approval of this plan approves the spec's 
 | B1 | Only a fresh feed acts; stale, failing, rate-limited or unknown changes nothing | REQ-SURF-009; spec 003 REQ-PUSH-002; `src/push/alarm.ts:51`, `src/push/changes.ts:44` |
 | B2 | Alert start counts only when the previous confirmed status was clear and seen at most 10 min earlier; a cold start or a longer gap only sets the baseline | owner, 2026-11-10 (app REQ-PUSH-008); `GAP_MS`, `src/push/changes.ts:6` |
 | B3 | One switch in the app; the server keeps two independent stores: notice devices (`push_devices`) and Live Activity records keyed by start token, whatever the notice switch | owner, 2026-11-10 (app plan, point 2 option a); app `LiveActivityPushRegistrar.swift` |
-| B4 | Alert-start notice: `"interruption-level": "active"` and `"sound": "drivecheck.caf"` (owner, 2026-11-10, replacing time-sensitive; see P6); title en "Air raid alert: {region}", uk "Повітряна тривога: {region}", ru "Воздушная тревога: {region}" | owner, 2026-11-10 (app plan, point 4) |
+| B4 | Alert-start notice: `"interruption-level": "time-sensitive"` and `"sound": "drivecheck.caf"` (owner, 2026-11-10; see P6 and P10); title en "Air raid alert: {region}", uk "Повітряна тривога: {region}", ru "Воздушная тревога: {region}" | owner, 2026-11-10 (app plan, point 4) |
 | B5 | Live Activity `start` to every record of the region, priority 10, with `alert`, `attributes-type`, `attributes`, `input-push-token: 1`, `stale-date` = check + 15 min | owner, 2026-11-10 (app plan, Approach 3 and point 5); Apple (Spike) |
 | B6 | `update` about every 5 min while the alarm lasts, priority 5, new check time and stale date | owner, 2026-11-10 (app spec Request, AC-4) |
 | B7 | All-clear: green content, `end`, `dismissal-date` = now + 300 s; the all-clear notice as in spec 003 | owner, 2026-11-10 (app plan, last paragraph) |
@@ -194,7 +194,7 @@ the server clears that `activity_token`.
 | AC-5 | `REQ-PUSH-008 nothing is sent on a stale, rate-limited or unknown feed` | 429 window open → nothing; region missing from the feed → nothing; stale clear → no `end` |
 | AC-10 | `REQ-PUSH-008 a region change moves the activity` | record holding a token moves Kharkiv → Lviv in alarm → one `update` titled "Lviv Oblast", phase `alarm`; moves to a clear region → one `end` titled with the new region, `quiet`; move without a token → nothing; move while the feed is stale → nothing |
 | AC-11 | `REQ-PUSHAPI-008 at most 5,000 records` | 5,000 stored, new start token → 503 and no row; known start token → 204 |
-| AC-12 | `REQ-PUSHAPI-013 urgent is a boolean or absent`, `REQ-PUSHAPI-013 urgent alerts break through Focus, the all-clear never does` | `urgent` true → stored 1, false → 0, absent → 0, a later PUT without it → 0; `"true"`, `1`, `0`, `null`, `{}` → 400, on both endpoints; devices and records with true, false, absent → alert start `time-sensitive`, `active`, `active`; the all-clear to the same three → never `time-sensitive`; every push `drivecheck.caf` |
+| AC-12 | `REQ-PUSHAPI-013 an urgent key is refused like any unknown key`, `REQ-PUSHAPI-013 every alert start breaks through Focus, the all-clear never does` | `urgent` true or false → 400 on both endpoints, the body without it → accepted; three devices and three records → every alert start `time-sensitive`; the all-clear to the same three → never `time-sensitive`; every push `drivecheck.caf` |
 | AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "active"` and `"sound": "drivecheck.caf"`, never `time-sensitive` |
 | AC-6 | `REQ-PUSHAPI-010 the payloads decode as the app's content state` | `content-state` keys exactly {phase, regionTitle, checkedAt, sourceLabel, isStale}; `checkedAt` for 2026-11-10T00:00:00Z = 815,961,600; `timestamp` = 1,794,268,800 for the same instant; headers `liveactivity`, topic `vil4max.RegionalCheck.push-type.liveactivity`; `start` has `attributes-type`, `attributes: {}`, `input-push-token: 1`, `alert`; every payload ≤ 4096 bytes; `source` "Mørk Skogen" → "Alert feed", "fixture" → "External feed" |
 | AC-7 | `REQ-PUSHAPI-009 a record keeps six fields for 60 days` | row keys exactly the six; 60 d − 1 ms kept, 60 d + 1 ms pruned with its outbox rows; captured logs contain neither token |
@@ -437,6 +437,14 @@ Questions for the owner beyond the critic, neutral order of options, the agent's
     time-sensitive, otherwise active; the all-clear stays active for everyone, and the sound is
     `drivecheck.caf` in every case. Spec AC-12 and REQ-PUSHAPI-013; the app adds the field on its
     side.
+  - Decision changed (owner, 2026-11-10, later the same day): no app switch. Whether an alert
+    breaks through Focus is the user's system setting (Time Sensitive Notifications for the app in
+    Settings), so neither PUT body takes `urgent` and a body with it is refused like any unknown
+    key; no column stores it. The alert-start notice and the Live Activity `start` alert are always
+    `time-sensitive`, the all-clear stays `active`, and every push plays `drivecheck.caf`. The app
+    drops the field on its side, and it needs the Time Sensitive Notifications capability again
+    (the note under P6 that it was no longer needed no longer holds). AC-12 and REQ-PUSHAPI-013 are
+    rewritten to this rule; the one migration left adds `kind` to the outbox.
 
 How the decisions shape the build (Stage 2):
 - The all-clear `end` needs no confirmed change: each fresh, newly processed snapshot queues one

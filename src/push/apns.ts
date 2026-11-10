@@ -146,7 +146,7 @@ export function apnsRequest(
       body:
         item.kind === "allclear"
           ? allClearPayload(item.region, item.lang)
-          : alertStartPayload(item.region, item.lang, item.urgent),
+          : alertStartPayload(item.region, item.lang),
     };
   }
   const snapshot = item.snapshot;
@@ -162,11 +162,7 @@ export function apnsRequest(
   });
   switch (item.kind) {
     case "la-start":
-      return live(
-        "10",
-        PUSH_LIFETIME_S,
-        startPayload(item.region, item.lang, snapshot, now, item.urgent),
-      );
+      return live("10", PUSH_LIFETIME_S, startPayload(item.region, item.lang, snapshot, now));
     case "la-update":
       return live("5", PUSH_LIFETIME_S, updatePayload(item.region, item.lang, snapshot, now));
     case "la-end":
