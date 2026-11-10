@@ -138,6 +138,13 @@ export function registerLiveActivity(
   const known = store.liveActivity(registration.startToken) !== null;
   if (!known && store.countLiveActivities() >= MAX_LIVE_ACTIVITIES) return 503;
   const row: LiveActivityRow = { ...registration, lastSeen: now };
-  store.upsertLiveActivity(row);
+  store.transaction(() => {
+    const previous = store.upsertLiveActivity(row);
+    // AC-10: the region follows the driver; a running activity must not keep the old region's
+    // state, so it gets one push with the new region's state once the alarm sends.
+    if (previous !== null && previous.region !== row.region && row.activityToken !== null) {
+      store.enqueueMove(row.startToken, row.region, now);
+    }
+  });
   return 204;
 }

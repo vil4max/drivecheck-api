@@ -1,4 +1,5 @@
 import type { CoordinatorView } from "../coordinator.ts";
+import type { Snapshot } from "../feed.ts";
 import { detectChanges, parseStatusRecord } from "./changes.ts";
 import type { PushStore } from "./registry.ts";
 
@@ -10,8 +11,6 @@ export const FEED_DEADLINE_MS = 20_000;
 export const SEND_REARM_MS = 1_000;
 /** A device not heard from for 60 days is deleted (owner, 2026-11-09). */
 export const DEVICE_EXPIRY_MS = 60 * 86_400_000;
-/** A queued push older than 5 minutes is deleted unsent (plan gate, point 2). */
-export const OUTBOX_TTL_MS = 5 * 60_000;
 export const STATUSES_KEY = "statuses";
 
 export interface AlarmDeps {
@@ -27,6 +26,8 @@ export interface AlarmDeps {
 /** Kept in the object's memory; after a restart the first alarm polls at once. */
 export interface AlarmState {
   lastPollAt: number | null;
+  /** The last fresh snapshot processed: the state queued Live Activity pushes carry. */
+  latest?: Snapshot | null;
 }
 
 /** The first registration starts the loop; a scheduled alarm is left as it is. */
@@ -36,8 +37,8 @@ export function alarmAfterRegistration(existing: number | null, now: number): nu
 
 const TIMED_OUT = Symbol("timed out");
 
-/** Reads the feed and queues the all-clear pushes of every confirmed change. */
-async function poll(deps: AlarmDeps): Promise<void> {
+/** Reads the feed and queues the pushes of every confirmed change and fresh state. */
+async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
   const view = await Promise.race([
     deps.refresh(),
     deps.deadline(FEED_DEADLINE_MS).then((): typeof TIMED_OUT => TIMED_OUT),
@@ -51,12 +52,13 @@ async function poll(deps: AlarmDeps): Promise<void> {
   if (view.rateLimitedUntil !== null) return;
   const { store } = deps;
   const now = deps.now();
-  const { record, cleared } = detectChanges(
+  const changes = detectChanges(
     parseStatusRecord(store.loadState(STATUSES_KEY)),
     view.snapshot,
     now,
   );
-  if (record === null) return;
+  const { record, cleared, started } = changes;
+  if (record === null || view.snapshot === null) return;
   // The baseline and the queued pushes are written together, so a retried alarm cannot queue a
   // change twice or lose one.
   store.transaction(() => {
@@ -64,8 +66,17 @@ async function poll(deps: AlarmDeps): Promise<void> {
     for (const region of cleared) {
       store.enqueue(region, `${region}@${record.processedFetchedAt}`, now);
     }
+    for (const region of started) {
+      const changeId = `start:${region}@${record.processedFetchedAt}`;
+      store.enqueue(region, changeId, now, "alertstart");
+      store.enqueueLiveActivityStarts(region, changeId, now);
+    }
+    // AC-4: any fresh clear ends every activity still held there, after a gap or a cold start too.
+    store.enqueueEnds(changes.quiet, now);
   });
+  state.latest = view.snapshot;
   if (cleared.length > 0) deps.log(`push alarm: all clear in ${cleared.join(", ")}`);
+  if (started.length > 0) deps.log(`push alarm: alert started in ${started.join(", ")}`);
 }
 
 /**
@@ -79,17 +90,19 @@ export async function runAlarm(deps: AlarmDeps, state: AlarmState): Promise<numb
   try {
     store.pruneDevices(now - DEVICE_EXPIRY_MS);
     store.pruneLiveActivities(now - DEVICE_EXPIRY_MS);
-    store.dropOutboxBefore(now - OUTBOX_TTL_MS);
+    store.dropExpiredOutbox(now);
+    // AC-9: notice devices and Live Activity records each keep the loop running.
+    const nobody = () => store.countDevices() + store.countLiveActivities() === 0;
     if (state.lastPollAt === null || now - state.lastPollAt >= POLL_MS) {
-      if (store.countDevices() === 0) return null;
+      if (nobody()) return null;
       state.lastPollAt = now;
-      await poll(deps);
+      await poll(deps, state);
     }
     if (deps.sendBatch !== undefined && store.hasOutbox()) {
       await deps.sendBatch();
       if (store.hasOutbox()) return deps.now() + SEND_REARM_MS;
     }
-    if (store.countDevices() === 0) return null;
+    if (nobody()) return null;
   } catch (error) {
     deps.log(`push alarm failed: ${(error as Error).message}`);
   }

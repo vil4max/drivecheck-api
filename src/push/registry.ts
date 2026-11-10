@@ -64,7 +64,29 @@ const SCHEMA = [
   )`,
   "CREATE INDEX IF NOT EXISTS push_live_activities_region ON push_live_activities (region)",
   "CREATE INDEX IF NOT EXISTS push_live_activities_seen ON push_live_activities (last_seen)",
+  // Only the records holding an activity token, by region: the 5-minute walk and the end sweep.
+  `CREATE INDEX IF NOT EXISTS push_live_activities_held
+     ON push_live_activities (region, start_token) WHERE activity_token IS NOT NULL`,
 ];
+
+/**
+ * What a queued row sends. Notice kinds name a device token, Live Activity kinds a start token;
+ * the activity token of `la-end` and `la-move` is read at send time.
+ */
+export type OutboxKind = "allclear" | "alertstart" | "la-start" | "la-end" | "la-move";
+export const NOTICE_KINDS: readonly OutboxKind[] = ["allclear", "alertstart"];
+
+/** How long a queued row may wait: as long as its push lives (plan gate, critic point 1). */
+export const PUSH_LIFETIME_MS: Record<OutboxKind, number> = {
+  allclear: 5 * 60_000,
+  alertstart: 5 * 60_000,
+  "la-start": 5 * 60_000,
+  "la-move": 5 * 60_000,
+  "la-end": 4 * 3_600_000,
+};
+
+// Spec 004 adds `kind` to the spec 003 outbox; rows queued before it are all-clear pushes.
+const ADD_KIND = "ALTER TABLE push_outbox ADD COLUMN kind TEXT NOT NULL DEFAULT 'allclear'";
 
 const DEVICE_COUNT_KEY = "deviceCount";
 const LIVE_ACTIVITY_COUNT_KEY = "liveActivityCount";
@@ -84,6 +106,12 @@ export interface LiveActivityRow {
 export class PushStore {
   constructor(private readonly sql: SqlRunner) {
     for (const statement of SCHEMA) sql.run(statement);
+    try {
+      sql.run(ADD_KIND);
+    } catch (error) {
+      // Every start after the first finds the column; anything else is a real failure.
+      if (!/duplicate column/i.test((error as Error).message)) throw error;
+    }
   }
 
   transaction<T>(work: () => T): T {
@@ -229,14 +257,57 @@ export class PushStore {
     );
   }
 
-  /** Queues one push for every device registered in `region`. */
-  enqueue(region: string, changeId: string, createdAt: number): void {
+  /** Queues one notice for every device registered in `region`. */
+  enqueue(
+    region: string,
+    changeId: string,
+    createdAt: number,
+    kind: "allclear" | "alertstart" = "allclear",
+  ): void {
     this.sql.run(
-      `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at)
-       SELECT token, region, ?, ? FROM push_devices WHERE region = ?`,
+      `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
+       SELECT token, region, ?, ?, ? FROM push_devices WHERE region = ?`,
+      changeId,
+      createdAt,
+      kind,
+      region,
+    );
+  }
+
+  /** Queues one Live Activity `start` for every record in `region` (spec 004, P2: always). */
+  enqueueLiveActivityStarts(region: string, changeId: string, createdAt: number): void {
+    this.sql.run(
+      `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
+       SELECT start_token, region, ?, ?, 'la-start' FROM push_live_activities WHERE region = ?`,
       changeId,
       createdAt,
       region,
+    );
+  }
+
+  /**
+   * Queues one `end` for every record holding an activity token in one of `regions`. The fixed
+   * change id keeps one pending end per record, however many snapshots see the region clear.
+   */
+  enqueueEnds(regions: readonly string[], createdAt: number): void {
+    if (regions.length === 0) return;
+    this.sql.run(
+      `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
+       SELECT start_token, region, 'end', ?, 'la-end' FROM push_live_activities
+       WHERE activity_token IS NOT NULL AND region IN (${regions.map(() => "?").join(", ")})`,
+      createdAt,
+      ...regions,
+    );
+  }
+
+  /** Queues the one push that moves a running activity to its record's new region (AC-10). */
+  enqueueMove(startToken: string, region: string, createdAt: number): void {
+    this.sql.run(
+      `INSERT OR IGNORE INTO push_outbox (token, region, change_id, created_at, kind)
+       VALUES (?, ?, 'move', ?, 'la-move')`,
+      startToken,
+      region,
+      createdAt,
     );
   }
 
@@ -245,6 +316,7 @@ export class PushStore {
       .all(
         `SELECT o.id, o.token, o.region, o.created_at, d.env, d.lang
          FROM push_outbox o JOIN push_devices d ON d.token = o.token
+         WHERE o.kind = 'allclear'
          ORDER BY o.id LIMIT ?`,
         limit,
       )
@@ -262,8 +334,14 @@ export class PushStore {
     this.sql.run("DELETE FROM push_outbox WHERE id = ?", id);
   }
 
-  dropOutboxBefore(before: number): void {
-    this.sql.run("DELETE FROM push_outbox WHERE created_at < ?", before);
+  /** Deletes unsent every queued row older than its push's lifetime. */
+  dropExpiredOutbox(now: number): void {
+    this.sql.run(
+      `DELETE FROM push_outbox
+       WHERE (kind = 'la-end' AND created_at < ?) OR (kind <> 'la-end' AND created_at < ?)`,
+      now - PUSH_LIFETIME_MS["la-end"],
+      now - PUSH_LIFETIME_MS.allclear,
+    );
   }
 
   /** Whether a push is queued; reads at most one row. */
