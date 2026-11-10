@@ -245,7 +245,14 @@ describe("edges of the Live Activity loop", () => {
       { value: "1" },
     ]);
     expect(db.prepare("SELECT kind FROM push_outbox").all()).toEqual([{ kind: "allclear" }]);
-    expect(Object.keys(db.prepare("SELECT * FROM push_devices").all()[0]!)).not.toContain("urgent");
+    // The migrated device table keeps exactly the five REQ-PUSHAPI-002 columns.
+    expect(Object.keys(db.prepare("SELECT * FROM push_devices").all()[0]!).sort()).toEqual([
+      "env",
+      "lang",
+      "last_seen",
+      "region",
+      "token",
+    ]);
 
     const bodies: string[] = [];
     const send = apnsSender(

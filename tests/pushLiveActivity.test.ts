@@ -82,6 +82,8 @@ describe("PUT and DELETE /v1/push/live-activity", () => {
 
     const refused = [
       { ...valid, token: TOKEN_B },
+      // AC-12: no app switch; the key is refused like any other.
+      { ...valid, urgent: false },
       { ...valid, activityToken: null },
       { ...valid, activityToken: "zz" },
       { ...valid, region: "kyiv-city" },

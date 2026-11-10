@@ -60,6 +60,8 @@ describe("PUT /v1/push/registration", () => {
 
     const refused = [
       { ...valid, lat: 50.4 },
+      // Spec 004 AC-12: no app switch; the key is refused like any other.
+      { ...valid, urgent: false },
       { ...valid, region: "kyiv-city" },
       { ...valid, region: "crimea" },
       { ...valid, env: "dev" },

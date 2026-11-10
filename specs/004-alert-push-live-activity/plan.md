@@ -195,7 +195,7 @@ the server clears that `activity_token`.
 | AC-10 | `REQ-PUSH-008 a region change moves the activity` | record holding a token moves Kharkiv → Lviv in alarm → one `update` titled "Lviv Oblast", phase `alarm`; moves to a clear region → one `end` titled with the new region, `quiet`; move without a token → nothing; move while the feed is stale → nothing |
 | AC-11 | `REQ-PUSHAPI-008 at most 5,000 records` | 5,000 stored, new start token → 503 and no row; known start token → 204 |
 | AC-12 | `REQ-PUSHAPI-013 an urgent key is refused like any unknown key`, `REQ-PUSHAPI-013 every alert start breaks through Focus, the all-clear never does` | `urgent` true or false → 400 on both endpoints, the body without it → accepted; three devices and three records → every alert start `time-sensitive`; the all-clear to the same three → never `time-sensitive`; every push `drivecheck.caf` |
-| AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "active"` and `"sound": "drivecheck.caf"`, never `time-sensitive` |
+| AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "time-sensitive"` and `"sound": "drivecheck.caf"`, never `critical` |
 | AC-6 | `REQ-PUSHAPI-010 the payloads decode as the app's content state` | `content-state` keys exactly {phase, regionTitle, checkedAt, sourceLabel, isStale}; `checkedAt` for 2026-11-10T00:00:00Z = 815,961,600; `timestamp` = 1,794,268,800 for the same instant; headers `liveactivity`, topic `vil4max.RegionalCheck.push-type.liveactivity`; `start` has `attributes-type`, `attributes: {}`, `input-push-token: 1`, `alert`; every payload ≤ 4096 bytes; `source` "Mørk Skogen" → "Alert feed", "fixture" → "External feed" |
 | AC-7 | `REQ-PUSHAPI-009 a record keeps six fields for 60 days` | row keys exactly the six; 60 d − 1 ms kept, 60 d + 1 ms pruned with its outbox rows; captured logs contain neither token |
 | AC-8 | `REQ-PUSHAPI-011 APNs answers by token kind` | `start` 410 → record deleted; `update` 410 → record kept, `activity_token` NULL; 400 `BadDeviceToken` on `end` → token cleared; 429, 500 → nothing changed, no retry |
@@ -312,6 +312,16 @@ above): no high or medium findings; six lows, tests in `tests/pushEdges.test.ts`
   `/v1/alerts` too; the one known case is a database created by the unreleased commit f4236d5,
   which has `kind` but no `schemaVersion`. Not fixed: nothing persisted ran that build; checked
   before deploy.
+
+Third review, 2026-11-10 (same reviewer, fresh context, on the commit that removes the urgent
+switch): no high or medium findings; four lows:
+- U1 the AC-6 row of the Tests table still named `active`: repaired.
+- U2 a local database where the removed urgent migration ran keeps an unused column and a version
+  above the list, so a later migration would be skipped there: not fixed in code; only local
+  `wrangler dev` state from the branch can have it, and nothing was deployed with it.
+- U3 the spec 003 migration test checked one absent column: repaired; it pins the five columns.
+- U4 the 400 for an `urgent` body was proved at the parser only: repaired; both endpoint tests
+  refuse it and store nothing.
 
 Budget correction: Cloudflare's SQLite storage page states that every index row update counts as
 an extra row written, so option A costs the upper figure, 4 rows per queued push.
