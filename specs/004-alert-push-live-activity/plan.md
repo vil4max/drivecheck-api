@@ -248,23 +248,23 @@ Other risks:
 - [ ] T002 Throwaway Worker (not committed to `main`): send `start`, then `update`, then `end` to the sandbox; record each answer and what the device shows; check G1, G3, G4, G6; measure the wall time of one invocation of 45 sends to the sandbox host, which replaces the assumed 2.2 s of "Budget" and sets the cap of P8.
 
 ## Group 1: Live Activity endpoint and record
-- [ ] T003 Test: `REQ-PUSHAPI-008 PUT and DELETE of a Live Activity record`, `REQ-PUSHAPI-009 a record keeps six fields for 60 days` prove AC-1, AC-7. Files: `tests/pushLiveActivity.test.ts`, `tests/router.test.ts`, `tests/pushSupport.ts`
-- [ ] T004 Implement: `src/push/liveActivity.ts` parsing, table and counter in `src/push/registry.ts`, router path, `worker.ts` RPCs, prune in the alarm.
+- [x] T003 Test: `REQ-PUSHAPI-008 PUT and DELETE of a Live Activity record`, `REQ-PUSHAPI-009 a record keeps six fields for 60 days` prove AC-1, AC-7. Files: `tests/pushLiveActivity.test.ts`, `tests/router.test.ts`, `tests/pushSupport.ts`
+- [x] T004 Implement: `src/push/liveActivity.ts` parsing, table and counter in `src/push/registry.ts`, router path, `worker.ts` RPCs, prune in the alarm.
 
 ## Group 2: Payloads and text
-- [ ] T005 Test: `REQ-PUSHAPI-010 the payloads decode as the app's content state`, `REQ-PUSHAPI-012 the alert-start text in three languages` prove AC-6. Files: `tests/pushPayloads.test.ts`
-- [ ] T006 Implement: payload builders, `alertStartText`, `sourceLabel`. Files: `src/push/liveActivity.ts`, `src/push/text.ts`
+- [x] T005 Test: `REQ-PUSHAPI-010 the payloads decode as the app's content state`, `REQ-PUSHAPI-012 the alert-start text in three languages` prove AC-6. Files: `tests/pushPayloads.test.ts`
+- [x] T006 Implement: payload builders, `alertStartText`, `sourceLabel`. Files: `src/push/liveActivity.ts`, `src/push/text.ts`
 
 ## Group 3: Detection, events and the alarm
-- [ ] T007 Test: the `REQ-PUSH-008` start, independence, all-clear and stale tests, `REQ-PUSHAPI-003 the alarm runs while either store has an entry` prove AC-2, AC-4, AC-5, AC-9. Files: `tests/pushChanges.test.ts`, `tests/pushLiveActivity.test.ts`
-- [ ] T008 Implement: `started` and `lastUpdateAt` in `changes.ts`, outbox `kind` with its migration, enqueue in `alarm.ts`, alarm run condition.
+- [x] T007 Test: the `REQ-PUSH-008` start, independence, end, move and lifetime tests, `REQ-PUSHAPI-003 the alarm runs while either store has an entry` prove AC-2, AC-4, AC-5, AC-9, AC-10. Files: `tests/pushAlertStart.test.ts`
+- [x] T008 Implement: `started`, `quiet` and `alarm` in `changes.ts`, the end sweep and the move row, outbox `kind` with its migration, enqueue in `alarm.ts`, alarm run condition.
 
 ## Group 4: Sender and updates
-- [ ] T009 Test: `REQ-PUSH-008 updates every 5 minutes while the alarm lasts`, `REQ-PUSHAPI-011 APNs answers by token kind` prove AC-3, AC-8. Files: `tests/pushSender.test.ts`
-- [ ] T010 Implement: per-kind request in `apns.ts`, dispatch and token clearing in `sender.ts`, the update walk of the chosen option. Files: `src/push/apns.ts`, `src/push/sender.ts`, `src/push/alarm.ts`
+- [x] T009 Test: `REQ-PUSH-008 updates every 5 minutes while the alarm lasts`, the start, end and move sending tests, `REQ-PUSHAPI-011 APNs answers by token kind`, `REQ-PUSHAPI-004 the update walk sends at most 45 per invocation` prove AC-3, AC-4, AC-8, AC-9, AC-10. Files: `tests/pushLiveActivitySender.test.ts`
+- [x] T010 Implement: per-kind request in `apns.ts`, dispatch and token clearing in `sender.ts`, the update walk of the chosen option. Files: `src/push/apns.ts`, `src/push/sender.ts`, `src/push/alarm.ts`
 
 ## Group 5: Docs and approval of requirements
-- [ ] T011 Docs: requirement statuses to approved; README endpoints, "Never", "Polite"; spec 003 pointers to spec 004. Files: `specs/004-alert-push-live-activity/spec.md`, `specs/003-allclear-push/spec.md`, `README.md`
+- [x] T011 Docs: requirement statuses to approved; README endpoints, "Never", "Polite"; spec 003 pointers to spec 004. Files: `specs/004-alert-push-live-activity/spec.md`, `specs/003-allclear-push/spec.md`, `README.md`
 
 Deploy and an end-to-end run on a TestFlight device follow the owner's separate approval; the app
 branch merges only after the server is deployed.

@@ -1,7 +1,8 @@
 # Feature specification: alert-start push and server-driven Live Activity (server)
 
 Feature: `004-alert-push-live-activity` · Created: 2026-11-10
-Status: draft, waiting for the owner's approval with the plan ([plan.md](plan.md), Points to decide).
+Status: approved by the owner on 2026-11-10 with the plan ([plan.md](plan.md), Points to decide).
+Group 0 (a real send to a device) is still open; deploy follows the owner's separate approval.
 App side: `regional-check`, branch `claude/alert-push` at 504d252, spec `specs/ALERT-push/` and
 `docs/requirements/push.md` (REQ-PUSH-008, REQ-PUSH-009). That spec, its plan with the owner's
 answers of 2026-11-10, and the app code on that branch are the source of the contract below; where
@@ -112,7 +113,7 @@ seconds since 2001-01-01 00:00 UTC; `timestamp`, `stale-date` and `dismissal-dat
 
 ### REQ-PUSH-008 — Alert start and a server-driven Live Activity
 
-Status: proposed (owner, 2026-11-10; shared with the app, enforced and tested here)
+Status: approved (owner, 2026-11-10; shared with the app, enforced and tested here)
 
 Given a fresh feed in which a region's alarm follows a clear status seen at most 10 minutes earlier\
 When the server polls\
@@ -124,7 +125,7 @@ it ends in green with a dismissal 5 minutes later; a stale, failing or unknown f
 
 ### REQ-PUSHAPI-008 — Live Activity endpoint
 
-Status: proposed (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10)
 
 Given a request to `/v1/push/live-activity`\
 When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`,
@@ -135,7 +136,7 @@ and the response opens no CORS access
 
 ### REQ-PUSHAPI-009 — Six fields, 60 days
 
-Status: proposed (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10)
 
 Given the server keeps a Live Activity record\
 When it stores or logs anything about it\
@@ -144,7 +145,7 @@ last-seen time, a record not refreshed for 60 days is deleted, and no log line c
 
 ### REQ-PUSHAPI-010 — Live Activity payloads
 
-Status: proposed (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10)
 
 Given a Live Activity push\
 When it is built\
@@ -154,7 +155,7 @@ record's language, and the payload is at most 4 KB
 
 ### REQ-PUSHAPI-011 — Answers per token kind
 
-Status: proposed (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10)
 
 Given APNs answers a Live Activity push\
 When the status is 410, or 400 with `BadDeviceToken` or `DeviceTokenNotForTopic`\
@@ -163,7 +164,7 @@ change nothing, and no push is retried; after any answer to an `end` its activit
 
 ### REQ-PUSHAPI-012 — The alert-start text
 
-Status: proposed (owner, 2026-11-10)
+Status: approved (owner, 2026-11-10)
 
 Given an alert-start notice or a Live Activity `start` for a region\
 When it is built\
