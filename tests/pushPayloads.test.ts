@@ -28,8 +28,8 @@ describe("Live Activity payloads", () => {
         attributes: {},
         "input-push-token": 1,
         "stale-date": 1_794_268_800 + 900,
-        "interruption-level": "time-sensitive",
-        alert: { title: "Повітряна тривога: Харківська область", sound: "default" },
+        "interruption-level": "active",
+        alert: { title: "Повітряна тривога: Харківська область", sound: "drivecheck.caf" },
         "content-state": {
           phase: "alarm",
           regionTitle: "Харківська область",
@@ -106,8 +106,8 @@ describe("the alert-start notice", () => {
     expect(JSON.parse(alertStartPayload("lviv", "en"))).toEqual({
       aps: {
         alert: { title: "Air raid alert: Lviv Oblast" },
-        sound: "default",
-        "interruption-level": "time-sensitive",
+        sound: "drivecheck.caf",
+        "interruption-level": "active",
       },
     });
     for (const region of REGIONS) {

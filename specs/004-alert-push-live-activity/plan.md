@@ -12,7 +12,7 @@ only, no production code; the owner's approval of this plan approves the spec's 
 | B1 | Only a fresh feed acts; stale, failing, rate-limited or unknown changes nothing | REQ-SURF-009; spec 003 REQ-PUSH-002; `src/push/alarm.ts:51`, `src/push/changes.ts:44` |
 | B2 | Alert start counts only when the previous confirmed status was clear and seen at most 10 min earlier; a cold start or a longer gap only sets the baseline | owner, 2026-11-10 (app REQ-PUSH-008); `GAP_MS`, `src/push/changes.ts:6` |
 | B3 | One switch in the app; the server keeps two independent stores: notice devices (`push_devices`) and Live Activity records keyed by start token, whatever the notice switch | owner, 2026-11-10 (app plan, point 2 option a); app `LiveActivityPushRegistrar.swift` |
-| B4 | Alert-start notice: `"interruption-level": "time-sensitive"`; title en "Air raid alert: {region}", uk "Повітряна тривога: {region}", ru "Воздушная тревога: {region}" | owner, 2026-11-10 (app plan, point 4) |
+| B4 | Alert-start notice: `"interruption-level": "active"` and `"sound": "drivecheck.caf"` (owner, 2026-11-10, replacing time-sensitive; see P6); title en "Air raid alert: {region}", uk "Повітряна тривога: {region}", ru "Воздушная тревога: {region}" | owner, 2026-11-10 (app plan, point 4) |
 | B5 | Live Activity `start` to every record of the region, priority 10, with `alert`, `attributes-type`, `attributes`, `input-push-token: 1`, `stale-date` = check + 15 min | owner, 2026-11-10 (app plan, Approach 3 and point 5); Apple (Spike) |
 | B6 | `update` about every 5 min while the alarm lasts, priority 5, new check time and stale date | owner, 2026-11-10 (app spec Request, AC-4) |
 | B7 | All-clear: green content, `end`, `dismissal-date` = now + 300 s; the all-clear notice as in spec 003 | owner, 2026-11-10 (app plan, last paragraph) |
@@ -194,7 +194,7 @@ the server clears that `activity_token`.
 | AC-5 | `REQ-PUSH-008 nothing is sent on a stale, rate-limited or unknown feed` | 429 window open → nothing; region missing from the feed → nothing; stale clear → no `end` |
 | AC-10 | `REQ-PUSH-008 a region change moves the activity` | record holding a token moves Kharkiv → Lviv in alarm → one `update` titled "Lviv Oblast", phase `alarm`; moves to a clear region → one `end` titled with the new region, `quiet`; move without a token → nothing; move while the feed is stale → nothing |
 | AC-11 | `REQ-PUSHAPI-008 at most 5,000 records` | 5,000 stored, new start token → 503 and no row; known start token → 204 |
-| AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "time-sensitive"` |
+| AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "active"` and `"sound": "drivecheck.caf"`, never `time-sensitive` |
 | AC-6 | `REQ-PUSHAPI-010 the payloads decode as the app's content state` | `content-state` keys exactly {phase, regionTitle, checkedAt, sourceLabel, isStale}; `checkedAt` for 2026-11-10T00:00:00Z = 815,961,600; `timestamp` = 1,794,268,800 for the same instant; headers `liveactivity`, topic `vil4max.RegionalCheck.push-type.liveactivity`; `start` has `attributes-type`, `attributes: {}`, `input-push-token: 1`, `alert`; every payload ≤ 4096 bytes; `source` "Mørk Skogen" → "Alert feed", "fixture" → "External feed" |
 | AC-7 | `REQ-PUSHAPI-009 a record keeps six fields for 60 days` | row keys exactly the six; 60 d − 1 ms kept, 60 d + 1 ms pruned with its outbox rows; captured logs contain neither token |
 | AC-8 | `REQ-PUSHAPI-011 APNs answers by token kind` | `start` 410 → record deleted; `update` 410 → record kept, `activity_token` NULL; 400 `BadDeviceToken` on `end` → token cleared; 429, 500 → nothing changed, no retry |
@@ -225,7 +225,7 @@ Collision audit (read-only):
 Other risks:
 - Free plan throughput: above about 6,100 records holding an activity token, a 5-minute update cycle
   does not finish in 5 minutes (Budget).
-- Two alerts at the start: a device with both switches on gets the time-sensitive notice and the
+- Two alerts at the start: a device with both switches on gets the alert-start notice and the
   `start` alert; the server cannot pair a notice token with a start token (P7).
 - Duplicate activity: when the app already holds an activity (it started one in the foreground), a
   `start` creates a second one; the app ends the newer one (app AC-7) while it runs. The app plan
@@ -284,7 +284,7 @@ Matches: endpoint path and methods, body fields and their formats (`LiveActivity
 record keyed by start token and independent of the notice switch, PUT on any change and every 7
 days, PUT-new-then-DELETE-old on a token change, 2xx as success, the topic, the content-state type,
 `checkedAt` as a default-encoded `Date`, phases `alarm` and `quiet`, the 15-minute stale date, the
-5-minute dismissal, the time-sensitive notice and its titles. Differences:
+5-minute dismissal, the notice and its titles. Differences:
 
 - D1 The app's plan, Approach 1, still describes the earlier contract (`liveActivityStartToken` in
   `/v1/push/registration`, and `/v1/push/activity {token, activityToken}`); its code, its decision
@@ -361,6 +361,9 @@ Questions for the owner beyond the critic, neutral order of options, the agent's
 - P4 Alert-start body and sound: no source. Proposed: no body, default sound as the all-clear.
   Owner decides.
   - Decision: accepted, title only and the default sound (owner, 2026-11-10).
+  - Decision changed (owner, 2026-11-10, later the same day): the sound of every push from this
+    server, the all-clear included, is `drivecheck.caf`, a short, calm custom sound the app will
+    bundle; iOS plays the default sound while a build lacks it. Spec 003 REQ-PUSHAPI-006 amended.
 - P5 Lifetimes (`apns-expiration`) of the new pushes: no source. Proposed: 5 minutes for the
   notice, `start` and `update`; for `end`, 4 hours, so a late `end` still clears a red activity.
   Owner decides.
@@ -368,6 +371,10 @@ Questions for the owner beyond the critic, neutral order of options, the agent's
 - P6 The Live Activity alert's interruption level: no source, and its effect is not documented
   (G5). Proposed: the same `time-sensitive` as the notice. Owner decides.
   - Decision: accepted, time-sensitive (owner, 2026-11-10).
+  - Decision changed (owner, 2026-11-10, later the same day): pushes are calm and informational,
+    not alarming; the alert-start notice and the Live Activity alert use the normal level
+    `active`, never `time-sensitive` or `critical`. This replaces the time-sensitive notice of the
+    app's plan as well; the app's time-sensitive entitlement is no longer needed by this server.
 - P7 Two alerts at the start for a device with both switches on (Risks). (a) Accept both, as the
   contract says. Counterargument: the driver hears two alerts for one event. (b) Send the `start`
   without `alert`. Counterargument: Apple requires an `alert` in `start`. (c) The app stops

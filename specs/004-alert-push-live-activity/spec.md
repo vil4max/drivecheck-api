@@ -14,15 +14,18 @@ Paraphrased; this public repository records decisions, not quotes. On 2026-11-10
 that the push should report not only the end of an alert but also its start, and that the push may
 start the app's Live Activity: red while the alert lasts, refreshed every 5 minutes, green at the
 all-clear, then removed. At the app's plan gate the same day he decided: one switch covers both
-notices; the alert-start notice is time-sensitive; Live Activity tokens go to the server whenever
+notices; Live Activity tokens go to the server whenever
 Live Activities are on, keyed by the push-to-start token, whatever the notice switch; the alert-start
 wording "Air raid alert: <region>" in three languages; a stale date 15 minutes after the check; the
-green activity is removed 5 minutes after the all-clear.
+green activity is removed 5 minutes after the all-clear. Later the same day he decided that the
+pushes are calm and informational, not alarming: the normal interruption level and a short, calm
+custom sound for every push (this replaces his earlier choice of a time-sensitive alert-start
+notice).
 
 ## Goal
 
 A driver learns that the alert in their region started and ended without opening the app: a
-time-sensitive notice (if notices are on) and a red Live Activity started by push (if Live
+calm notice (if notices are on) and a red Live Activity started by push (if Live
 Activities are on) at the start, the activity kept current every 5 minutes while the alert lasts,
 and at the all-clear the existing notice plus a green activity that leaves the Lock Screen after
 5 minutes.
@@ -38,7 +41,7 @@ Numbered for the server; the app's criteria they serve are in brackets.
   other method answers 405. The record is independent of `/v1/push/registration`.
 - **AC-2** [app AC-3] Given a fresh feed in which a region is in alarm and its previous confirmed
   status was clear, seen at most 10 minutes earlier, then every notice device of that region gets one
-  time-sensitive alert-start notice, and every Live Activity record of that region gets one
+  alert-start notice, and every Live Activity record of that region gets one
   Live Activity `start` push; the same alarm on later polls sends nothing more.
 - **AC-3** [app AC-4] While that alarm lasts, every record of the region with an `activityToken`
   gets an `update` push at priority 5 about every 5 minutes, carrying the latest fresh check time and
@@ -97,9 +100,11 @@ seconds since 2001-01-01 00:00 UTC; `timestamp`, `stale-date` and `dismissal-dat
 - `end` (to the activity token, priority 10): `event` `end`, `timestamp`, phase `quiet` (the green
   final content, in one step, with no `update` before it), `dismissal-date` = now + 300 s.
 - The alert-start notice (to the notice token, `apns-push-type: alert`, topic `APNS_TOPIC`):
-  `aps.alert` with the alert-start title only, `aps.sound` `default`, `aps."interruption-level"`
-  `time-sensitive`. The Live Activity `start` alert is the same title with the default sound and the
-  same interruption level.
+  `aps.alert` with the alert-start title only, `aps.sound` `drivecheck.caf`,
+  `aps."interruption-level"` `active` (never `time-sensitive` or `critical`). The Live Activity
+  `start` alert is the same title with the same sound and the same interruption level. Every push
+  of this server plays `drivecheck.caf`, a short, calm sound the app bundles; iOS plays the default
+  sound while a build lacks the file.
 - Lifetimes (`apns-expiration`, and the time a queued push may wait): 5 minutes for the notice,
   `start` and `update`; 4 hours for `end`.
 
@@ -111,7 +116,7 @@ Status: proposed (owner, 2026-11-10; shared with the app, enforced and tested he
 
 Given a fresh feed in which a region's alarm follows a clear status seen at most 10 minutes earlier\
 When the server polls\
-Then each notice device of the region gets one time-sensitive alert-start notice, each Live Activity
+Then each notice device of the region gets one calm alert-start notice, each Live Activity
 record of the region gets one `start` push, the activity is updated about every 5 minutes at
 priority 5 with a stale date 15 minutes after its check, and once the region is clear in a fresh feed
 it ends in green with a dismissal 5 minutes later; a stale, failing or unknown feed sends nothing
@@ -163,7 +168,8 @@ Status: proposed (owner, 2026-11-10)
 Given an alert-start notice or a Live Activity `start` for a region\
 When it is built\
 Then its title is, in the device's language, with the region's name in that language: en "Air raid
-alert: {region}"; uk "Повітряна тривога: {region}"; ru "Воздушная тревога: {region}"
+alert: {region}"; uk "Повітряна тривога: {region}"; ru "Воздушная тревога: {region}"; it has no
+body, plays `drivecheck.caf` and uses the `active` interruption level
 
 ## Out of scope
 

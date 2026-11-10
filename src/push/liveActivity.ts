@@ -4,7 +4,13 @@ import type { Lang } from "../regions.ts";
 import { checkedAt } from "../status.ts";
 import { regionFromAppCode } from "./registration.ts";
 import type { ApnsEnv, LiveActivityRow, PushStore } from "./registry.ts";
-import { alertStartTitle, regionName, sourceLabel } from "./text.ts";
+import {
+  alertStartTitle,
+  INTERRUPTION_LEVEL,
+  PUSH_SOUND,
+  regionName,
+  sourceLabel,
+} from "./text.ts";
 
 /** Seconds from 1970-01-01 to 2001-01-01, Foundation's reference date. */
 const REFERENCE_DATE_S = 978_307_200;
@@ -41,8 +47,8 @@ export function startPayload(regionId: string, lang: Lang, snapshot: Snapshot, n
       attributes: {},
       "input-push-token": 1,
       "stale-date": unixSeconds(checkedAt(snapshot)) + STALE_AFTER_S,
-      "interruption-level": "time-sensitive",
-      alert: { title: alertStartTitle(regionId, lang), sound: "default" },
+      "interruption-level": INTERRUPTION_LEVEL,
+      alert: { title: alertStartTitle(regionId, lang), sound: PUSH_SOUND },
       "content-state": contentState(regionId, lang, snapshot, "alarm"),
     },
   });

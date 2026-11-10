@@ -21,9 +21,17 @@ export function allClearText(regionId: string, lang: Lang): AllClearText {
   return { title: TITLE[lang](regionName(regionId, lang)), body: BODY[lang] };
 }
 
-/** The APNs payload: the alert with the default sound (owner, 2026-11-10), nothing else. */
+/**
+ * Every push from this server plays this short, calm sound, which the app bundles; while a build
+ * lacks the file, iOS plays the default sound instead (owner, 2026-11-10).
+ */
+export const PUSH_SOUND = "drivecheck.caf";
+/** Pushes inform, never alarm: the normal level, not time-sensitive or critical (owner, 2026-11-10). */
+export const INTERRUPTION_LEVEL = "active";
+
+/** The APNs payload: the alert with the Drive Check sound, nothing else. */
 export function allClearPayload(regionId: string, lang: Lang): string {
-  return JSON.stringify({ aps: { alert: allClearText(regionId, lang), sound: "default" } });
+  return JSON.stringify({ aps: { alert: allClearText(regionId, lang), sound: PUSH_SOUND } });
 }
 
 // The owner's wording at the app's plan gate, 2026-11-10 (spec 004, REQ-PUSHAPI-012); title only.
@@ -37,13 +45,13 @@ export function alertStartTitle(regionId: string, lang: Lang): string {
   return ALERT_START[lang](regionName(regionId, lang));
 }
 
-/** The alert-start notice: title only, the default sound, time-sensitive (owner, 2026-11-10). */
+/** The alert-start notice: title only, the Drive Check sound, the normal interruption level. */
 export function alertStartPayload(regionId: string, lang: Lang): string {
   return JSON.stringify({
     aps: {
       alert: { title: alertStartTitle(regionId, lang) },
-      sound: "default",
-      "interruption-level": "time-sensitive",
+      sound: PUSH_SOUND,
+      "interruption-level": INTERRUPTION_LEVEL,
     },
   });
 }
