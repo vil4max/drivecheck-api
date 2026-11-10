@@ -43,13 +43,14 @@ Numbered for the server; the app's criteria they serve are in brackets.
 - **AC-3** [app AC-4] While that alarm lasts, every record of the region with an `activityToken`
   gets an `update` push at priority 5 about every 5 minutes, carrying the latest fresh check time and
   a stale date 15 minutes after it.
-- **AC-4** [app AC-5] Given a confirmed all-clear (spec 003 REQ-PUSH-002), every notice device gets
-  the all-clear notice as today, and every record of the region with an `activityToken` gets the green
-  content and an `end` push with a dismissal date 5 minutes after it is sent; the server then forgets
-  that `activityToken`.
-- **AC-5** [app AC-6] A stale, failing, rate-limited or unknown feed, a cold start, or a gap of more
-  than 10 minutes since the previous confirmed status sends no notice, no `start`, no `update` and no
-  `end`.
+- **AC-4** [app AC-5, AC-9] Given a fresh feed in which a region is clear, every record of that
+  region with an `activityToken` gets one `end` push carrying the green final content and a dismissal
+  date 5 minutes after it is sent, also after a feed gap or a cold start, so an activity never
+  vanishes from red; the server then forgets that `activityToken`. A confirmed all-clear (spec 003
+  REQ-PUSH-002) also sends the all-clear notice as today.
+- **AC-5** [app AC-6] A stale, failing, rate-limited or unknown feed sends nothing. A cold start, or a
+  gap of more than 10 minutes since the previous confirmed status, sends no notice and no `start`;
+  `update` and `end` follow any fresh state.
 - **AC-6** [app AC-8] The alert-start notice and the Live Activity alert exist in English, Ukrainian
   and Russian, and `regionTitle` is the app's region name in the record's language.
 - **AC-7** The Live Activity record holds only the start token, the region code, the APNs
@@ -57,9 +58,17 @@ Numbered for the server; the app's criteria they serve are in brackets.
   it is deleted after 60 days without contact; no log line contains a token.
 - **AC-8** APNs answers are handled per token: a start token that APNs calls gone or bad deletes its
   record; an activity token that APNs calls gone or bad clears only that token; other answers delete
-  nothing, and nothing is retried.
+  nothing, and nothing is retried. An `end` is tried once: whatever the answer, the server then
+  forgets that activity token, so a failing `end` is not repeated every poll.
 - **AC-9** The polling alarm keeps running while either a notice device or a Live Activity record
   exists, within the existing coordinator rules, and every invocation stays within 50 subrequests.
+- **AC-10** [app AC-9] Given a PUT that changes the region of a record holding an `activityToken`,
+  then that activity gets one push with the new region's fresh state, named for the new region: an
+  `update` in red if the region is in alarm, or the green `end` if it is clear; a stale red for the
+  old region is never left on screen. Without a fresh state nothing is sent, and AC-3 and AC-4 catch
+  up once the feed is fresh.
+- **AC-11** At most 5,000 Live Activity records are kept; a new start token above the cap answers
+  503 and stores nothing; a known start token still refreshes.
 
 ## API contract (from the app's code at 504d252)
 
@@ -85,10 +94,14 @@ seconds since 2001-01-01 00:00 UTC; `timestamp`, `stale-date` and `dismissal-dat
   time + 15 min, `alert` with the alert-start text, `content-state` phase `alarm`, `isStale` false.
 - `update` (to the activity token, priority 5): `event` `update`, `timestamp`, `stale-date`, phase
   `alarm` with the new check time.
-- `end` (to the activity token, priority 10): `event` `end`, `timestamp`, phase `quiet`,
-  `dismissal-date` = now + 300 s.
+- `end` (to the activity token, priority 10): `event` `end`, `timestamp`, phase `quiet` (the green
+  final content, in one step, with no `update` before it), `dismissal-date` = now + 300 s.
 - The alert-start notice (to the notice token, `apns-push-type: alert`, topic `APNS_TOPIC`):
-  `aps.alert` with the alert-start text, `aps."interruption-level"` `time-sensitive`.
+  `aps.alert` with the alert-start title only, `aps.sound` `default`, `aps."interruption-level"`
+  `time-sensitive`. The Live Activity `start` alert is the same title with the default sound and the
+  same interruption level.
+- Lifetimes (`apns-expiration`, and the time a queued push may wait): 5 minutes for the notice,
+  `start` and `update`; 4 hours for `end`.
 
 ## Requirements
 
@@ -100,9 +113,9 @@ Given a fresh feed in which a region's alarm follows a clear status seen at most
 When the server polls\
 Then each notice device of the region gets one time-sensitive alert-start notice, each Live Activity
 record of the region gets one `start` push, the activity is updated about every 5 minutes at
-priority 5 with a stale date 15 minutes after its check, and at a confirmed all-clear it turns
-green and ends with a dismissal 5 minutes later; a stale, failing or unknown feed, a cold start or a
-longer gap sends nothing (REQ-SURF-009)
+priority 5 with a stale date 15 minutes after its check, and once the region is clear in a fresh feed
+it ends in green with a dismissal 5 minutes later; a stale, failing or unknown feed sends nothing
+(REQ-SURF-009), and a cold start or a longer gap sends no notice and no `start`
 
 ### REQ-PUSHAPI-008 — Live Activity endpoint
 
@@ -112,7 +125,8 @@ Given a request to `/v1/push/live-activity`\
 When it is a `PUT` with exactly the four required fields and at most the optional `activityToken`,
 each valid, or a `DELETE` with a start token\
 Then the server stores or replaces, or deletes, that one record and answers 204; any other body
-answers 400 and stores nothing, any other method 405, and the response opens no CORS access
+answers 400 and stores nothing, any other method 405, a new start token above 5,000 records 503,
+and the response opens no CORS access
 
 ### REQ-PUSHAPI-009 — Six fields, 60 days
 
@@ -140,7 +154,7 @@ Status: proposed (owner, 2026-11-10)
 Given APNs answers a Live Activity push\
 When the status is 410, or 400 with `BadDeviceToken` or `DeviceTokenNotForTopic`\
 Then a start token's record is deleted, an activity token is cleared from its record, other answers
-change nothing, and no push is retried
+change nothing, and no push is retried; after any answer to an `end` its activity token is cleared
 
 ### REQ-PUSHAPI-012 — The alert-start text
 
@@ -164,9 +178,10 @@ Developer portal changes, the app side.
   environments, the 10-minute gap rule, no retry, at most 45 sends per invocation, the 20 s feed
   deadline, the 60-day expiry, 400 and 405 answers with strict body validation.
 
+- 2026-11-10 (owner, at this plan's gate): the answers recorded under the plan's Points to decide;
+  this spec states them (AC-4, AC-5, AC-10, AC-11, "APNs payloads").
+
 ## Assumptions
 
 - The app's minimum iOS is 27 (app plan, Risks), so push-to-start (iOS 17.2) and `input-push-token`
   (iOS 18) are always available.
-- The values still open (alert-start body and sound, the push lifetimes, the gap rule for `end`,
-  the fan-out design, caps) are listed in the plan's Points to decide and are not filled in here.

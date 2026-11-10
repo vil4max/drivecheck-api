@@ -190,8 +190,10 @@ the server clears that `activity_token`.
 | AC-2, AC-5 | `REQ-PUSH-008 an alarm after a recent clear starts once` (one test, one clock) | clear at t, alarm at t+600,000 ms → one notice per device and one `start` per record in that region, none in another; alarm at t+600,001 → none; same alarm on the next poll → none; cold start in alarm → none; stale snapshot → none and no baseline write |
 | AC-2 | `REQ-PUSH-008 notices and Live Activities are independent` | region with 1 notice device and no record → 1 notice, 0 `start`; 0 devices and 1 record → 0 notices, 1 `start`, and the alarm keeps polling |
 | AC-3 | `REQ-PUSH-008 updates every 5 minutes while the alarm lasts` (one clock) | `start` at t; fresh snapshots every 30 s → `update` at the first snapshot ≥ t+300,000 ms, not at t+270,000; record without `activityToken` → no update; priority 5; `stale-date` = check + 900 s; feed stale at the due time → none, and the next fresh one sends it |
-| AC-4 | `REQ-PUSH-008 the all-clear ends the activity` | alarm → clear within 10 min → all-clear notice, `end` with phase `quiet`, `dismissal-date` = send second + 300, priority 10; then `activity_token` cleared and no update follows; record without token → no `end` |
-| AC-5 | `REQ-PUSH-008 nothing is sent on a stale, rate-limited or unknown feed` | 429 window open → nothing; region missing from the feed → nothing; gap > 10 min before the clear → no `end` (unless P1 decides otherwise) |
+| AC-4 | `REQ-PUSH-008 a fresh clear ends the activity in green` | alarm → clear within 10 min → all-clear notice and one `end` with phase `quiet`, `dismissal-date` = send second + 300, priority 10, no `update` before it; then `activity_token` cleared and no further push; clear after a gap of 11 min → `end` but no notice; cold start clear with a held token → `end`; record without token → no `end`; an `end` answered 500 → token cleared, not sent again |
+| AC-5 | `REQ-PUSH-008 nothing is sent on a stale, rate-limited or unknown feed` | 429 window open → nothing; region missing from the feed → nothing; stale clear → no `end` |
+| AC-10 | `REQ-PUSH-008 a region change moves the activity` | record holding a token moves Kharkiv → Lviv in alarm → one `update` titled "Lviv Oblast", phase `alarm`; moves to a clear region → one `end` titled with the new region, `quiet`; move without a token → nothing; move while the feed is stale → nothing |
+| AC-11 | `REQ-PUSHAPI-008 at most 5,000 records` | 5,000 stored, new start token → 503 and no row; known start token → 204 |
 | AC-6 | `REQ-PUSHAPI-012 the alert-start text in three languages` | uk Kharkiv → "Повітряна тривога: Харківська область"; en Kyiv city → "Air raid alert: Kyiv"; ru Odesa → "Воздушная тревога: Одесская область"; notice has `"interruption-level": "time-sensitive"` |
 | AC-6 | `REQ-PUSHAPI-010 the payloads decode as the app's content state` | `content-state` keys exactly {phase, regionTitle, checkedAt, sourceLabel, isStale}; `checkedAt` for 2026-11-10T00:00:00Z = 815,961,600; `timestamp` = 1,794,268,800 for the same instant; headers `liveactivity`, topic `vil4max.RegionalCheck.push-type.liveactivity`; `start` has `attributes-type`, `attributes: {}`, `input-push-token: 1`, `alert`; every payload ≤ 4096 bytes; `source` "Mørk Skogen" → "Alert feed", "fixture" → "External feed" |
 | AC-7 | `REQ-PUSHAPI-009 a record keeps six fields for 60 days` | row keys exactly the six; 60 d − 1 ms kept, 60 d + 1 ms pruned with its outbox rows; captured logs contain neither token |
@@ -308,23 +310,32 @@ Plan critic findings (separate pass, 2026-11-10), unchanged, each with the agent
    deleted unsent, so an `end` given a longer lifetime (P5) would still be dropped after 5 minutes ->
    decide the outbox lifetime per kind. Proposed: each kind's row lives as long as its push's
    `apns-expiration`; owner decides with P5.
+   - Decision: accepted, each queued row lives as long as its push's lifetime (owner, 2026-11-10).
 2. [4] spec AC-5 ("a cold start ... sends no `update` and no `end`") and plan "Change detection"
    (a cold-start region in alarm still gets updates and the `end`): the plan and the spec disagree ->
    decide which holds. Proposed: as P1 (b): `update` and `end` follow any fresh state of a held
    activity token, notices and `start` keep the confirmed-change rule, and AC-5 is narrowed to them;
    owner decides with P1.
+   - Decision: accepted, `update` and `end` follow any fresh state, and AC-5 is narrowed to
+     notices and `start` (owner, 2026-11-10).
 3. [1] plan "Change detection" and "Sending": a record whose `region` changes while its activity
    runs is walked under the new region, so the old region's red activity is never updated or ended
    when the new region is quiet -> decide what a region change does to a held activity. Proposed: a
    PUT that changes the region of a record holding an activity token queues one push with the new
    region's fresh state, `update` if it is in alarm, `end` if it is clear. Owner decides.
+   - Decision: accepted, kept simple: the region follows the driver's location in the app, so a PUT
+     that moves a record holding an activity sends one push with the new region's fresh state under
+     the new region's name, a red `update` in alarm, the green `end` with the 5-minute dismissal when
+     clear; a stale red for the old region must never stay on screen (owner, 2026-11-10; spec AC-10).
 4. [2] plan "Sending", `src/push/registry.ts:46-53,101-107`: the plan did not say which token a Live
    Activity outbox row holds, so the dedupe key, a token change before the send and a DELETE with
    queued rows were undefined -> decide the key. Proposed: the start token, the activity token read
    at send time. Fixed in the plan ("Sending").
+   - Decision: accepted (owner, 2026-11-10).
 5. [3] plan "Budget" (about 150 ms per round, 2.2 s per invocation): the throughput limit of about
    6,100 records and the cap of P8 rest on an unmeasured latency -> measure it before the cap is set.
    Proposed: Group 0 measures one invocation of 45 sends. Fixed in the plan (T002).
+   - Decision: accepted; Group 0 waits for the owner's debug build (owner, 2026-11-10).
 
 Questions for the owner beyond the critic, neutral order of options, the agent's lean last:
 
@@ -333,25 +344,50 @@ Questions for the owner beyond the critic, neutral order of options, the agent's
   Counterargument: contradicts the app's AC-9. (b) The gap rule holds for notices only; a fresh
   clear always sends `end` to a held activity token. Counterargument: widens AC-5 and the shared
   REQ-PUSH-008 text. Agent's lean: (b), since `end` shows a fresh state and no notice is sent.
+  - Decision: (b), stated more strongly: once a region is clear in a fresh feed, the activity always
+    ends in green, also after a gap or a cold start, and the green stays visible for 5 minutes; it
+    never vanishes from red. The gap and cold-start rule holds for notices and `start` only; spec
+    AC-4 and AC-5 amended (owner, 2026-11-10).
 - P2 A record that already has an activity token at an alarm start. (a) Always `start`, as the
   contract says; the app ends the extra one. Counterargument: two activities while the app is not
   running. (b) `update` the held token to red with an alert instead. Counterargument: a token of an
   activity the user removed is silently ignored (G4), so no red activity appears. Agent's lean: (a).
+  - Decision: (a), always `start` (owner, 2026-11-10).
 - P3 The green `update` before `end`. (a) Send both, as the dispatch says. Counterargument: one
   extra push per record; Apple puts the final content in `end`. (b) Send `end` only, with the green
   content. Counterargument: deviates from the dispatch text. Agent's lean: (b).
+  - Decision: (b), one `end` with the green final content and the 5-minute dismissal; the green is a
+    separate, visible all-clear state (owner, 2026-11-10).
 - P4 Alert-start body and sound: no source. Proposed: no body, default sound as the all-clear.
   Owner decides.
+  - Decision: accepted, title only and the default sound (owner, 2026-11-10).
 - P5 Lifetimes (`apns-expiration`) of the new pushes: no source. Proposed: 5 minutes for the
   notice, `start` and `update`; for `end`, 4 hours, so a late `end` still clears a red activity.
   Owner decides.
+  - Decision: accepted (owner, 2026-11-10).
 - P6 The Live Activity alert's interruption level: no source, and its effect is not documented
   (G5). Proposed: the same `time-sensitive` as the notice. Owner decides.
+  - Decision: accepted, time-sensitive (owner, 2026-11-10).
 - P7 Two alerts at the start for a device with both switches on (Risks). (a) Accept both, as the
   contract says. Counterargument: the driver hears two alerts for one event. (b) Send the `start`
   without `alert`. Counterargument: Apple requires an `alert` in `start`. (c) The app stops
   registering the notice token while Live Activities are on. Counterargument: app change, and a
   driver who removes the activity loses the alert. Agent's lean: (a).
+  - Decision: (a), two alerts accepted (owner, 2026-11-10).
 - P8 Cap on Live Activity records: no source. Proposed: 5,000, answering 503 above it as
   REQ-PUSHAPI-007, below the 6,100 cycle limit. Owner decides.
+  - Decision: accepted, 5,000, revisited after Group 0 (owner, 2026-11-10).
 - P9 The fan-out option A, B or C (Approach). Agent's lean: B.
+  - Decision: B (owner, 2026-11-10).
+
+How the decisions shape the build (Stage 2):
+- The all-clear `end` needs no confirmed change: each fresh, newly processed snapshot queues one
+  `end` for every record holding an activity token in a region that snapshot shows clear. This one
+  rule covers the confirmed all-clear, a gap, a cold start and a record moved into a clear region.
+- An `end` is tried once; its activity token is then cleared whatever APNs answers, so it is not
+  repeated (spec AC-8).
+- The 5-minute updates walk the records of each region in alarm, from memory (option B); the
+  per-region update times are memory only, so after an eviction a region in alarm is updated at once.
+- Queued Live Activity rows that need the feed state (`start`, `end`, the region-change push) take
+  it from the last fresh snapshot the alarm processed; with none in memory the row is dropped unsent,
+  and the region-change push also needs that snapshot to be fresh when it is sent.
