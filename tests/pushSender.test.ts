@@ -161,6 +161,9 @@ describe("sending all-clear pushes", () => {
     expect(refreshes).toBe(0);
   });
 
+  /** The all-clear titles of REQ-PUSHAPI-006 in the three languages. */
+  const ALL_CLEAR_TITLE = /^(All clear|Відбій тривоги|Отбой тревоги): /;
+
   test("REQ-PUSHAPI-006 every notice carries the calm Drive Check sound", async () => {
     const { store } = memoryStore();
     const langs = ["en", "uk", "ru"] as const;
@@ -186,13 +189,15 @@ describe("sending all-clear pushes", () => {
     for (const push of apns.sent) {
       const { aps } = JSON.parse(push.body);
       expect(aps.sound).toBe("drivecheck.caf");
-      // The alert-start notice is title only; the all-clear has a body and stays calm.
-      const level = aps.alert.body === undefined ? "time-sensitive" : "active";
+      // Both notices are title only (owner, 2026-11-12); the all-clear stays calm.
+      expect(aps.alert.body).toBeUndefined();
+      const level = ALL_CLEAR_TITLE.test(aps.alert.title) ? "active" : "time-sensitive";
       expect(aps["interruption-level"] ?? "active").toBe(level);
     }
-    expect(apns.sent.filter((p) => JSON.parse(p.body).aps.alert.body === undefined)).toHaveLength(
-      10,
+    const allClears = apns.sent.filter((p) =>
+      ALL_CLEAR_TITLE.test(JSON.parse(p.body).aps.alert.title),
     );
+    expect(allClears).toHaveLength(60);
   });
 
   test("REQ-PUSHAPI-005 APNs answers decide what is deleted", async () => {
@@ -279,18 +284,10 @@ describe("sending all-clear pushes", () => {
   });
 
   test("REQ-PUSHAPI-006 the texts and the 5-minute lifetime", async () => {
-    expect(allClearText("kharkiv", "uk")).toEqual({
-      title: "Відбій тривоги: Харківська область",
-      body: "Повітряна тривога закінчилась.",
-    });
-    expect(allClearText("kyiv-city", "en")).toEqual({
-      title: "All clear: Kyiv",
-      body: "The air alert has ended.",
-    });
-    expect(allClearText("odesa", "ru")).toEqual({
-      title: "Отбой тревоги: Одесская область",
-      body: "Воздушная тревога окончена.",
-    });
+    // Title only (owner, 2026-11-12): no body that restates the all-clear in other words.
+    expect(allClearText("kharkiv", "uk")).toEqual({ title: "Відбій тривоги: Харківська область" });
+    expect(allClearText("kyiv-city", "en")).toEqual({ title: "All clear: Kyiv" });
+    expect(allClearText("odesa", "ru")).toEqual({ title: "Отбой тревоги: Одесская область" });
     for (const region of REGIONS) {
       for (const lang of LANGS) {
         const payload = allClearPayload(region.id, lang);
@@ -325,10 +322,7 @@ describe("sending all-clear pushes", () => {
     expect(production.headers.authorization).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
     expect(JSON.parse(production.body)).toEqual({
       aps: {
-        alert: {
-          title: "Відбій тривоги: Харківська область",
-          body: "Повітряна тривога закінчилась.",
-        },
+        alert: { title: "Відбій тривоги: Харківська область" },
         sound: "drivecheck.caf",
       },
     });

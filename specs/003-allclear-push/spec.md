@@ -112,13 +112,14 @@ Then the device record is deleted; other answers delete nothing, and no push is 
 
 ### REQ-PUSHAPI-006 — The all-clear text and its lifetime
 
-Status: approved (owner, 2026-11-09)
+Status: approved (owner, 2026-11-09; amended 2026-11-12: title only, «Title only»)
 
 Given an all-clear push for a region\
 When it is built\
-Then its title and body are, in the device's language, with the region's name in that language:
-en "All clear: {region}" / "The air alert has ended."; uk "Відбій тривоги: {region}" /
-"Повітряна тривога закінчилась."; ru "Отбой тревоги: {region}" / "Воздушная тревога окончена.";
+Then it has a title and no body, in the device's language, with the region's name in that
+language: en "All clear: {region}"; uk "Відбій тривоги: {region}"; ru "Отбой тревоги: {region}"
+(the earlier body, "The air alert has ended.", read as a second, different wording of the
+all-clear; owner, 2026-11-12);
 it plays the short, calm Drive Check sound the app bundles (`"sound": "drivecheck.caf"`; iOS
 falls back to the default sound while a build lacks the file; owner, 2026-11-10, replacing the
 default sound decided earlier the same day);
