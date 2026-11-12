@@ -91,18 +91,59 @@ export async function sendBatch(
   const now = (options.now ?? Date.now)();
   const taken = store.takeOutbox(options.limit ?? BATCH_SIZE);
   const items: OutboxItem[] = [];
+  // REQ-PUSHAPI-014: tallied by the queued kind, so a resolved `la-move` still counts as one.
+  const tallies = new Map<string, Tally>();
+  const tally = (kind: string): Tally => {
+    let entry = tallies.get(kind);
+    if (entry === undefined) {
+      entry = { sent: 0, "drop-token": 0, keep: 0, dropped: 0 };
+      tallies.set(kind, entry);
+    }
+    return entry;
+  };
+  const queuedKind = new Map<number, string>();
   for (const row of taken) {
     const item = resolve(row, options.latest ?? null, now);
-    if (item === null) store.deleteOutbox(row.id);
-    else items.push(item);
+    if (item === null) {
+      store.deleteOutbox(row.id);
+      tally(row.kind).dropped += 1;
+    } else {
+      queuedKind.set(item.id, row.kind);
+      items.push(item);
+    }
   }
-  const outcomes = await sendAll(store, items, send, (item) => store.deleteOutbox(item.id));
-  if (items.length > 0) {
-    log(
-      `push batch: ${outcomes.sent} sent, ${outcomes["drop-token"]} tokens deleted, ${outcomes.keep} failed`,
-    );
-  }
+  const counted: Send = async (item) => {
+    const outcome = await send(item).catch(() => "keep" as const);
+    tally(queuedKind.get(item.id) ?? item.kind)[outcome] += 1;
+    return outcome;
+  };
+  await sendAll(store, items, counted, (item) => store.deleteOutbox(item.id));
+  if (taken.length > 0) log(batchLine(tallies));
   return taken.length;
+}
+
+type Tally = Record<Outcome | "dropped", number>;
+
+const TALLY_WORDS: [keyof Tally, string][] = [
+  ["sent", "sent"],
+  ["drop-token", "tokens deleted"],
+  ["keep", "failed"],
+  ["dropped", "dropped"],
+];
+
+/** `push batch: <totals>; <kind>: <non-zero counts>; …`, kinds in name order, no token in it. */
+function batchLine(tallies: Map<string, Tally>): string {
+  const total: Tally = { sent: 0, "drop-token": 0, keep: 0, dropped: 0 };
+  const kinds: string[] = [];
+  for (const [kind, counts] of [...tallies].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [key] of TALLY_WORDS) total[key] += counts[key];
+    const parts = TALLY_WORDS.filter(([key]) => counts[key] > 0).map(
+      ([key, word]) => `${counts[key]} ${word}`,
+    );
+    kinds.push(`${kind}: ${parts.join(", ")}`);
+  }
+  const totals = TALLY_WORDS.map(([key, word]) => `${total[key]} ${word}`).join(", ");
+  return `push batch: ${totals}; ${kinds.join("; ")}`;
 }
 
 /**

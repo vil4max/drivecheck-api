@@ -100,6 +100,7 @@ async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
   );
   const { record, cleared, started } = changes;
   if (record === null || view.snapshot === null) return;
+  const queuedStarts: string[] = [];
   // The baseline and the queued pushes are written together, so a retried alarm cannot queue a
   // change twice or lose one.
   store.transaction(() => {
@@ -111,6 +112,10 @@ async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
       const changeId = `start:${region}@${record.processedFetchedAt}`;
       store.enqueue(region, changeId, now, "alertstart");
       store.enqueueLiveActivityStarts(region, changeId, now);
+      // REQ-PUSHAPI-014: a zero here means no device of the region can get the Live Activity.
+      queuedStarts.push(
+        `${region}, ${store.countLiveActivitiesIn(region)} live activity starts queued`,
+      );
     }
     // AC-4: any fresh clear ends every activity still held there, after a gap or a cold start too.
     store.enqueueEnds(changes.quiet, now);
@@ -118,7 +123,7 @@ async function poll(deps: AlarmDeps, state: AlarmState): Promise<void> {
   state.latest = view.snapshot;
   planUpdates(state, changes, now);
   if (cleared.length > 0) deps.log(`push alarm: all clear in ${cleared.join(", ")}`);
-  if (started.length > 0) deps.log(`push alarm: alert started in ${started.join(", ")}`);
+  for (const line of queuedStarts) deps.log(`push alarm: alert started in ${line}`);
 }
 
 /**

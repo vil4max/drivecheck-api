@@ -297,6 +297,15 @@ export class PushStore {
     );
   }
 
+  /** How many Live Activity records `region` holds (REQ-PUSHAPI-014: the start's log line). */
+  countLiveActivitiesIn(region: string): number {
+    const [row] = this.sql.all(
+      "SELECT COUNT(*) AS n FROM push_live_activities WHERE region = ?",
+      region,
+    );
+    return Number(row?.n ?? 0);
+  }
+
   /** Queues one Live Activity `start` for every record in `region` (spec 004, P2: always). */
   enqueueLiveActivityStarts(region: string, changeId: string, createdAt: number): void {
     this.sql.run(
