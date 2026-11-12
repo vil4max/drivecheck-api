@@ -29,6 +29,13 @@ describe("token length", () => {
     expect(
       db.prepare("SELECT length(start_token) AS n FROM push_live_activities ORDER BY n").all(),
     ).toEqual([{ n: 1 }, { n: 256 }, { n: 1024 }]);
+    expect(
+      db
+        .prepare(
+          "SELECT length(activity_token) AS n FROM push_live_activities WHERE activity_token IS NOT NULL",
+        )
+        .all(),
+    ).toEqual([{ n: 256 }]);
   });
 
   test("REQ-PUSHAPI-001 a notice registration takes tokens of 1 to 1024 hex digits", async () => {
