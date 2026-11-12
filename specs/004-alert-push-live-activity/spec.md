@@ -83,7 +83,9 @@ Numbered for the server; the app's criteria they serve are in brackets.
 ## API contract (from the app's code at 504d252)
 
 - `PUT /v1/push/live-activity`, JSON body
-  `{"startToken","region","env","lang"[,"activityToken"]}`: both tokens lowercase hex, `region` an iOS
+  `{"startToken","region","env","lang"[,"activityToken"]}`: both tokens lowercase hex of 1 to 1024
+  digits (amended 2026-11-12: a push-to-start token is 256 digits; the first cap of 200 refused it),
+  `region` an iOS
   `AlertRegion` raw value (`kyivCity`, ...), `env` `production|sandbox`, `lang` `en|uk|ru`;
   `activityToken` is absent when the app holds no activity (Swift's synthesized `Codable` omits a
   `nil` optional). The app sends it again whenever a field changes and at least every 7 days. Any

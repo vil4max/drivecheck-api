@@ -45,7 +45,8 @@ Numbered as in the app's spec (`regional-check` `specs/ALLCLEAR-push/spec.md`), 
 
 ## API contract (from the app's plan, "Contract")
 
-- `PUT /v1/push/registration`, JSON body `{"token","region","env","lang"}`: `token` hex,
+- `PUT /v1/push/registration`, JSON body `{"token","region","env","lang"}`: `token` hex
+  of 1 to 1024 digits (amended 2026-11-12, spec 004),
   `region` an iOS `AlertRegion` raw value (`kyivCity`, `ivanoFrankivsk`, ...), `env`
   `production|sandbox`, `lang` `en|uk|ru`. Answer 204. The same token again replaces its record and
   refreshes its last-seen time.

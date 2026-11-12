@@ -13,8 +13,12 @@ export interface Registration {
 /** Above it a new token is refused with 503 (owner decision at the plan gate, 2026-11-09). */
 export const MAX_DEVICES = 10_000;
 
-/** An APNs device token as the app sends it: hex digits only. */
-const TOKEN = /^[0-9a-f]{1,200}$/i;
+/**
+ * An APNs token as the app sends it: hex digits only. Apple fixes no size ("APNs device tokens
+ * are of variable length. Don't hard-code their size."); an ActivityKit push-to-start token
+ * measured 256 digits, so the bound only refuses absurd bodies (owner, 2026-11-12).
+ */
+const TOKEN = /^[0-9a-f]{1,1024}$/i;
 export const ENVS: readonly ApnsEnv[] = ["production", "sandbox"];
 
 // The app sends its `AlertRegion` raw values (`kyivCity`); the catalog ids are their kebab form.
