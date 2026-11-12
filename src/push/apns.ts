@@ -193,7 +193,7 @@ export function apnsSender(
       });
     } catch {
       // The error text may carry the request URL, and with it the token: name only the kind.
-      log("push not sent: network error");
+      log(`push not sent: ${item.kind} network error`);
       return "keep";
     }
     if (response.status === 200) return "sent";
@@ -205,7 +205,8 @@ export function apnsSender(
       reason = null;
     }
     if (response.status === 403 && reason === "ExpiredProviderToken") token.expire();
-    log(`push refused: ${response.status} ${reason ?? ""}`.trimEnd());
+    // REQ-PUSHAPI-014: the kind ties the status to the push, e.g. a refused Live Activity start.
+    log(`push refused: ${item.kind} ${response.status} ${reason ?? ""}`.trimEnd());
     return classify(response.status, reason);
   };
 }

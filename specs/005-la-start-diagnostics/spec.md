@@ -24,7 +24,9 @@ start queued a Live Activity `start` for the region, and what became of each kin
   records the `start` was queued for in that region (`0` included).
 - **AC-2** A batch log line gives, per push kind, how many were sent, refused with a deleted token,
   failed, and dropped unsent by `resolve`.
-- **AC-3** No log line holds a device token, a start token or an activity token.
+- **AC-3** A push APNs refuses, or one the network does not deliver, is logged with its kind next
+  to the APNs status and reason (`push refused: la-start 400 InvalidPushType`).
+- **AC-4** No log line holds a device token, a start token or an activity token.
 
 ## Requirements
 
@@ -35,8 +37,8 @@ Status: approved (owner, 2026-11-12)
 Given an alarm start in a region, or a batch of queued pushes\
 When the Worker processes it\
 Then the alarm line gives the number of Live Activity `start` pushes queued for the region, the
-batch line gives per kind the sent, token-deleted, failed and dropped counts, and no line holds a
-token
+batch line gives per kind the sent, token-deleted, failed and dropped counts, a refused push is
+logged with its kind next to the APNs status, and no line holds a token
 
 ## Out of scope
 
