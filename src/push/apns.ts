@@ -162,17 +162,9 @@ export function apnsRequest(
   });
   switch (item.kind) {
     case "la-start":
-      return live(
-        "10",
-        PUSH_LIFETIME_S,
-        startPayload(item.region, item.lang, snapshot, now, item.alertStartedAt),
-      );
+      return live("10", PUSH_LIFETIME_S, startPayload(item.region, item.lang, snapshot, now));
     case "la-update":
-      return live(
-        "5",
-        PUSH_LIFETIME_S,
-        updatePayload(item.region, item.lang, snapshot, now, item.alertStartedAt),
-      );
+      return live("5", PUSH_LIFETIME_S, updatePayload(item.region, item.lang, snapshot, now));
     case "la-end":
       return live("10", END_LIFETIME_S, endPayload(item.region, item.lang, snapshot, now));
     case "la-move":

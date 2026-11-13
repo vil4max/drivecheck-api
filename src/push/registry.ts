@@ -29,8 +29,6 @@ export interface OutboxItem {
   createdAt: number;
   /** The feed state a Live Activity push carries. */
   snapshot?: Snapshot;
-  /** REQ-PUSHAPI-015: when the region's alarm started, resolved at send time when known. */
-  alertStartedAt?: number;
 }
 
 export type SendKind = OutboxKind | "la-update";

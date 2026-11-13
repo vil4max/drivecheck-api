@@ -9,11 +9,6 @@ export interface RegionStatus {
   alert: boolean;
   /** `fetchedAt` of the snapshot that last confirmed this status. */
   seenAt: number;
-  /**
-   * REQ-PUSHAPI-015: `fetchedAt` of the snapshot that confirmed the alarm's start after a
-   * confirmed clear; absent while clear, after a cold start, or for an alarm seen after a gap.
-   */
-  alertSince?: number;
 }
 
 /** The one overwritten record of region statuses (plan gate, point 4): no history. */
@@ -74,29 +69,7 @@ export function detectChanges(
     if (confirmed && before.alert && !state.alertnow) changes.cleared.push(region.id);
     if (confirmed && !before.alert && state.alertnow) changes.started.push(region.id);
     (state.alertnow ? changes.alarm : changes.quiet).push(region.id);
-    const status: RegionStatus = { alert: state.alertnow, seenAt: snapshot.fetchedAt };
-    const since = alarmSince(state.alertnow, confirmed ? before : undefined, snapshot.fetchedAt);
-    if (since !== undefined) status.alertSince = since;
-    regions[region.id] = status;
+    regions[region.id] = { alert: state.alertnow, seenAt: snapshot.fetchedAt };
   }
   return { ...changes, record: { processedFetchedAt: snapshot.fetchedAt, regions } };
-}
-
-/**
- * REQ-PUSHAPI-015: a confirmed clear → alarm starts it at this snapshot, a confirmed alarm keeps
- * its start, and anything else (clear, cold start, a gap) has none.
- */
-function alarmSince(
-  alertNow: boolean,
-  confirmedBefore: RegionStatus | undefined,
-  fetchedAt: number,
-): number | undefined {
-  if (!alertNow || confirmedBefore === undefined) return undefined;
-  return confirmedBefore.alert ? confirmedBefore.alertSince : fetchedAt;
-}
-
-/** REQ-PUSHAPI-015: when the region's current alarm started, if this server saw it start. */
-export function alertStartOf(record: StatusRecord | null, regionId: string): number | undefined {
-  const status = record?.regions[regionId];
-  return status?.alert ? status.alertSince : undefined;
 }
