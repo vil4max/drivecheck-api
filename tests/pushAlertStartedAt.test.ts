@@ -9,6 +9,7 @@ import {
   updatePayload,
 } from "../src/push/liveActivity";
 import type { OutboxItem } from "../src/push/registry";
+import { sendBatch } from "../src/push/sender";
 import { alarmLoop, memoryStore, tokenNo } from "./pushSupport";
 import { snapshotWith, T0 } from "./support";
 
@@ -144,5 +145,53 @@ describe("REQ-PUSHAPI-015 through the alarm loop", () => {
     const expected = startedAt / 1000 - REFERENCE_DATE_S;
     expect(bodies.length).toBeGreaterThanOrEqual(2);
     expect(bodies.map((body) => body.alertStartedAt)).toEqual(bodies.map(() => expected));
+  });
+
+  test("REQ-PUSHAPI-015 a move into a region in alarm carries that region's start", async () => {
+    const { store } = memoryStore();
+    const start = tokenNo(0x52);
+    registerLiveActivity(
+      store,
+      {
+        startToken: start,
+        region: "lviv",
+        env: "production",
+        lang: "en",
+        activityToken: tokenNo(0xa2),
+      },
+      T0,
+    );
+    // AC-10: the driver moved to Kharkiv; the record follows and a move is queued, which resolves
+    // to Kharkiv's red update.
+    registerLiveActivity(
+      store,
+      {
+        startToken: start,
+        region: "kharkiv",
+        env: "production",
+        lang: "en",
+        activityToken: tokenNo(0xa2),
+      },
+      T0,
+    );
+    const kharkivStart = T0 - 120_000;
+    const bodies: Record<string, unknown>[] = [];
+    await sendBatch(
+      store,
+      async (item) => {
+        bodies.push(contentState(apnsRequest(item, "topic", T0).body));
+        return "sent";
+      },
+      () => {},
+      {
+        latest: snap([KHARKIV], T0),
+        alertStart: (region) => (region === "kharkiv" ? kharkivStart : undefined),
+        now: () => T0,
+      },
+    );
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.phase).toBe("alarm");
+    expect(bodies[0]?.alertStartedAt).toBe(kharkivStart / 1000 - REFERENCE_DATE_S);
   });
 });
