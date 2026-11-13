@@ -6,7 +6,12 @@ import {
   type MapState,
   type StoredState,
 } from "./coordinator.ts";
-import { type AlarmState, alarmAfterRegistration, runAlarm } from "./push/alarm.ts";
+import {
+  type AlarmState,
+  alarmAfterRegistration,
+  runAlarm,
+  savedAlertStarts,
+} from "./push/alarm.ts";
 import { type ApnsEnvVars, apnsSender, credentialsFrom, ProviderToken } from "./push/apns.ts";
 import { type LiveActivityRegistration, registerLiveActivity } from "./push/liveActivity.ts";
 import { type Registration, register } from "./push/registration.ts";
@@ -107,12 +112,14 @@ export class FeedCoordinatorObject extends DurableObject<Env> {
                 sendBatch(this.push, send, log, {
                   limit,
                   latest: this.alarmState.latest ?? null,
+                  alertStart: savedAlertStarts(this.push),
                   now: () => Date.now(),
                 }),
               sendUpdates: (walk: WalkEntry[], limit: number) =>
                 sendUpdates(this.push, walk, send, log, {
                   limit,
                   latest: this.alarmState.latest ?? null,
+                  alertStart: savedAlertStarts(this.push),
                   now: () => Date.now(),
                 }),
             }),

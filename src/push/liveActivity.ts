@@ -19,20 +19,36 @@ type Phase = "alarm" | "quiet";
  * The app's `DriveCheckActivityAttributes.ContentState`, field for field. ActivityKit decodes it
  * with default strategies, so `checkedAt` is a `Date` in seconds since the reference date.
  */
-function contentState(regionId: string, lang: Lang, snapshot: Snapshot, phase: Phase) {
+function contentState(
+  regionId: string,
+  lang: Lang,
+  snapshot: Snapshot,
+  phase: Phase,
+  alertStartedAt?: number,
+) {
   return {
     phase,
     regionTitle: regionName(regionId, lang),
     checkedAt: checkedAt(snapshot) / 1000 - REFERENCE_DATE_S,
     sourceLabel: sourceLabel(snapshot.feed.source, lang),
     isStale: false,
+    // REQ-PUSHAPI-015: only when known; an app before 3.4 ignores the key.
+    ...(alertStartedAt === undefined
+      ? {}
+      : { alertStartedAt: alertStartedAt / 1000 - REFERENCE_DATE_S }),
   };
 }
 
 const unixSeconds = (ms: number) => Math.floor(ms / 1000);
 
 /** `start` to a push-to-start token: red, with the alert-start title and a new update token. */
-export function startPayload(regionId: string, lang: Lang, snapshot: Snapshot, now: number) {
+export function startPayload(
+  regionId: string,
+  lang: Lang,
+  snapshot: Snapshot,
+  now: number,
+  alertStartedAt?: number,
+) {
   return JSON.stringify({
     aps: {
       event: "start",
@@ -43,19 +59,25 @@ export function startPayload(regionId: string, lang: Lang, snapshot: Snapshot, n
       "stale-date": unixSeconds(checkedAt(snapshot)) + STALE_AFTER_S,
       "interruption-level": ALERT_START_LEVEL,
       alert: { title: alertStartTitle(regionId, lang), sound: PUSH_SOUND },
-      "content-state": contentState(regionId, lang, snapshot, "alarm"),
+      "content-state": contentState(regionId, lang, snapshot, "alarm", alertStartedAt),
     },
   });
 }
 
 /** `update` while the alarm lasts: the new check time and stale date. */
-export function updatePayload(regionId: string, lang: Lang, snapshot: Snapshot, now: number) {
+export function updatePayload(
+  regionId: string,
+  lang: Lang,
+  snapshot: Snapshot,
+  now: number,
+  alertStartedAt?: number,
+) {
   return JSON.stringify({
     aps: {
       event: "update",
       timestamp: unixSeconds(now),
       "stale-date": unixSeconds(checkedAt(snapshot)) + STALE_AFTER_S,
-      "content-state": contentState(regionId, lang, snapshot, "alarm"),
+      "content-state": contentState(regionId, lang, snapshot, "alarm", alertStartedAt),
     },
   });
 }

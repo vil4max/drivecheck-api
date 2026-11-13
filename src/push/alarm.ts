@@ -1,7 +1,7 @@
 import type { CoordinatorView } from "../coordinator.ts";
 import type { Snapshot } from "../feed.ts";
 import { isStale } from "../status.ts";
-import { type Changes, detectChanges, parseStatusRecord } from "./changes.ts";
+import { alertStartOf, type Changes, detectChanges, parseStatusRecord } from "./changes.ts";
 import type { PushStore } from "./registry.ts";
 import { BATCH_SIZE, type WalkEntry } from "./sender.ts";
 
@@ -14,6 +14,15 @@ export const SEND_REARM_MS = 1_000;
 /** A device not heard from for 60 days is deleted (owner, 2026-11-09). */
 export const DEVICE_EXPIRY_MS = 60 * 86_400_000;
 export const STATUSES_KEY = "statuses";
+
+/**
+ * REQ-PUSHAPI-015: each region's alarm start from the status record as saved now, for the senders'
+ * `alertStart` option. Read from storage, not memory, so a restarted object keeps every start.
+ */
+export function savedAlertStarts(store: PushStore): (region: string) => number | undefined {
+  const record = parseStatusRecord(store.loadState(STATUSES_KEY));
+  return (region) => alertStartOf(record, region);
+}
 
 export interface AlarmDeps {
   store: PushStore;

@@ -16,6 +16,8 @@ export interface SendOptions {
   limit?: number;
   /** The last fresh snapshot the alarm processed: the state a Live Activity push carries. */
   latest?: Snapshot | null;
+  /** REQ-PUSHAPI-015: when a region's alarm started, read from the saved status record. */
+  alertStart?: (region: string) => number | undefined;
   now?: () => number;
 }
 
@@ -77,6 +79,16 @@ function resolve(item: OutboxItem, latest: Snapshot | null, now: number): Outbox
   return { ...item, kind: state.alertnow ? "la-update" : "la-end", snapshot: latest };
 }
 
+/** REQ-PUSHAPI-015: a red `start` or `update` carries the region's alarm start when it is known. */
+function withAlertStart(
+  item: OutboxItem | null,
+  alertStart: SendOptions["alertStart"],
+): OutboxItem | null {
+  if (item === null || (item.kind !== "la-start" && item.kind !== "la-update")) return item;
+  const startedAt = alertStart?.(item.region);
+  return startedAt === undefined ? item : { ...item, alertStartedAt: startedAt };
+}
+
 /**
  * Sends up to `limit` queued pushes, `PARALLEL` at a time (REQ-PUSHAPI-004). Each row is deleted
  * before its request, so an alarm retried after a crash cannot send it twice. Returns the number
@@ -103,7 +115,7 @@ export async function sendBatch(
   };
   const queuedKind = new Map<number, string>();
   for (const row of taken) {
-    const item = resolve(row, options.latest ?? null, now);
+    const item = withAlertStart(resolve(row, options.latest ?? null, now), options.alertStart);
     if (item === null) {
       store.deleteOutbox(row.id);
       tally(row.kind).dropped += 1;
@@ -170,17 +182,21 @@ export async function sendUpdates(
     const entry = walk[0]!;
     const rows = store.heldLiveActivities(entry.region, entry.after, remaining);
     for (const row of rows) {
-      items.push({
-        id: 0,
-        kind: "la-update",
-        key: row.startToken,
-        token: row.activityToken,
-        region: row.region,
-        env: row.env,
-        lang: row.lang,
-        createdAt: 0,
-        snapshot: latest,
-      });
+      const item = withAlertStart(
+        {
+          id: 0,
+          kind: "la-update",
+          key: row.startToken,
+          token: row.activityToken,
+          region: row.region,
+          env: row.env,
+          lang: row.lang,
+          createdAt: 0,
+          snapshot: latest,
+        },
+        options.alertStart,
+      );
+      if (item !== null) items.push(item);
     }
     remaining -= rows.length;
     if (rows.length > 0) entry.after = rows[rows.length - 1]!.startToken;

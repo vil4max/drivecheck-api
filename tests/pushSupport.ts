@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import type { CoordinatorView } from "../src/coordinator";
 import type { Snapshot } from "../src/feed";
-import { type AlarmDeps, type AlarmState, runAlarm } from "../src/push/alarm";
+import { type AlarmDeps, type AlarmState, runAlarm, savedAlertStarts } from "../src/push/alarm";
 import type { ApnsCredentials } from "../src/push/apns";
 import { registerLiveActivity } from "../src/push/liveActivity";
 import { register } from "../src/push/registration";
@@ -75,9 +75,11 @@ export async function generatedCredentials(): Promise<ApnsCredentials> {
 export function alarmLoop(store: PushStore, send: Send, clock: { now: number }) {
   let view: CoordinatorView = { snapshot: null, rateLimitedUntil: null };
   const state: AlarmState = { lastPollAt: null };
+  // As the Worker wires it, so a test of the loop also covers the saved alarm starts.
   const options = (limit: number) => ({
     limit,
     latest: state.latest ?? null,
+    alertStart: savedAlertStarts(store),
     now: () => clock.now,
   });
   const deps: AlarmDeps = {
