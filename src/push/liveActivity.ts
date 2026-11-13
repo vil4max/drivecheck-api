@@ -1,6 +1,6 @@
-import type { Snapshot } from "../feed.ts";
+import { kyivTimeToEpochMs, type Snapshot } from "../feed.ts";
 import { LANGS } from "../i18n.ts";
-import type { Lang } from "../regions.ts";
+import { type Lang, regionById } from "../regions.ts";
 import { checkedAt } from "../status.ts";
 import { ENVS, hasFields, isRecord, parseToken, regionFromAppCode } from "./registration.ts";
 import type { ApnsEnv, LiveActivityRow, PushStore } from "./registry.ts";
@@ -20,13 +20,29 @@ type Phase = "alarm" | "quiet";
  * with default strategies, so `checkedAt` is a `Date` in seconds since the reference date.
  */
 function contentState(regionId: string, lang: Lang, snapshot: Snapshot, phase: Phase) {
+  const startedAt = phase === "alarm" ? alarmStartedAt(snapshot, regionId) : null;
   return {
     phase,
     regionTitle: regionName(regionId, lang),
     checkedAt: checkedAt(snapshot) / 1000 - REFERENCE_DATE_S,
     sourceLabel: sourceLabel(snapshot.feed.source, lang),
     isStale: false,
+    // REQ-PUSHAPI-015: only when known; an app before 3.4 ignores the key.
+    ...(startedAt === null ? {} : { alertStartedAt: startedAt / 1000 - REFERENCE_DATE_S }),
   };
+}
+
+/**
+ * REQ-PUSHAPI-015: when the region's current alarm started, as the feed says it (owner,
+ * 2026-11-13: the time from the response, not when this server saw it). The feed's `changed` is
+ * the alarm's start for a region in alarm; for a clear region it is only the cache time, so it is
+ * never read there.
+ */
+export function alarmStartedAt(snapshot: Snapshot, regionId: string): number | null {
+  const apiKey = regionById(regionId)?.apiKey;
+  const state = apiKey === undefined ? undefined : snapshot.feed.states[apiKey];
+  if (state?.alertnow !== true || state.changed === undefined) return null;
+  return kyivTimeToEpochMs(state.changed);
 }
 
 const unixSeconds = (ms: number) => Math.floor(ms / 1000);
