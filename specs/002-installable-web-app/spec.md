@@ -2,8 +2,8 @@
 
 Feature: `002-installable-web-app` · Created: 2026-10-20
 Status: approved by the owner on 2026-10-20 with the plan (`plan.md`); the refinements listed as O9
-under "Owner decisions" wait for the owner's confirmation, and REQ-WEB-014's first-paint part waits
-for a measurement on the deployed Worker. Shared requirements keep the status the owner gave them in
+under "Owner decisions" wait for the owner's confirmation; REQ-WEB-014's first paint was measured on
+the deployed Worker on 2026-10-20. Shared requirements keep the status the owner gave them in
 `regional-check` or in slice 1.
 Input: the owner's decision to make the status page an installable web app served by the same
 Worker, and the owner decisions below.
@@ -321,8 +321,8 @@ web the list is where the visitor picks the region (O8).
 
 ### REQ-WEB-014 — Responsive, fast, accessible showcase
 
-Status: approved (owner, 2026-10-20, with the plan); the first-paint part is open until measured on
-the deployed Worker after the owner approves the deploy.
+Status: approved (owner, 2026-10-20, with the plan); the first-paint part is met, measured on the
+deployed Worker on 2026-10-20 (see "Measured on the deployed Worker" below).
 
 Given a visitor on a phone from 320 px wide up to a desktop\
 When the Status or Regions page renders\
@@ -332,6 +332,21 @@ WCAG AA contrast (4.5 : 1, 3 : 1 for large text) on its own background, cards in
 load of `/` on the deployed Worker reaches a Largest Contentful Paint under 2.5 s and a First
 Contentful Paint under 1.8 s as measured in the browser and stated in the PR, with phone and
 desktop screenshots
+
+Measured on the deployed Worker (2026-10-20, Worker version b41deea0,
+`https://drivecheck.vil4max.com/?lang=en`):
+three cold loads in desktop Chrome 155 over HTTP/3, with the service worker and its caches cleared
+before each, read from the page's `PerformanceObserver` entries.
+
+| Run | First Contentful Paint | Largest Contentful Paint | Time to first byte | Layout shift |
+|---|---|---|---|---|
+| 1 | 380 ms | 380 ms (the map card) | 105 ms | 0 |
+| 2 | 148 ms | 148 ms | 122 ms | 0 |
+| 3 | 136 ms | 136 ms | 111 ms | 0 |
+
+All runs are far under the 1.8 s and 2.5 s limits. Limits of the method: no network or CPU
+throttling and no Lighthouse mobile run (it needs the `lighthouse` package, not installed here), so
+a slow mobile connection is not covered by these numbers.
 
 ### REQ-SURF-010 — A yellow "stay alert" status when alerts surround a quiet region
 
